@@ -4,12 +4,6 @@ variable "region" {
   default     = "ap-northeast-1"
 }
 
-variable "dify_api_version" {
-  description = "The version of the Dify API to use"
-  type        = string
-  default     = "0.7.3"
-}
-
 variable "vpc_id" {
   description = "The ID of the VPC where resources will be deployed"
   type        = string
@@ -20,19 +14,14 @@ variable "vpc_cidr_block" {
   type        = string
 }
 
-variable "public_subnet_id" {
-  description = "The ID of the public subnet where resources will be deployed"
-  type        = string
-}
-
 variable "private_subnet_ids" {
   description = "A list of private subnet IDs where resources will be deployed"
   type        = list(string)
   default     = []
 }
 
-variable "private_subnet_cidrs" {
-  description = "CIDR blocks for the private subnets where the Aurora cluster will be deployed"
+variable "public_subnet_ids" {
+  description = "A list of public subnet IDs where ALB will be deployed"
   type        = list(string)
   default     = []
 }
@@ -47,17 +36,23 @@ variable "default_tags" {
   }))
 }
 
-variable "aurora_cluster_scaling_configuration" {
-  description = "Configuration for RDS cluster scaling"
-  type = object({
-    max_capacity             = number
-    min_capacity             = number
-    seconds_until_auto_pause = number
-  })
-  default = {
-    max_capacity             = 0.0
-    min_capacity             = 1.0
-    seconds_until_auto_pause = 300 # minutes
-  }
+variable "base_name" {
+  description = "Base name for resources"
+  type        = string
+  default     = "dify"
 }
 
+variable "aws_rds_cluster_scaling_configuration" {
+  description = "Scaling configuration for the RDS cluster"
+  type        = object({
+    min_capacity = number
+    max_capacity = number
+    seconds_until_auto_pause = number
+  })
+
+  default = {
+    min_capacity              = 0
+    max_capacity              = 1
+    seconds_until_auto_pause  = 300
+  }
+}

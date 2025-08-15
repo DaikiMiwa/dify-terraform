@@ -7,16 +7,10 @@ terraform {
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.5.1"
     }
   }
 }
 
 provider "aws" {
   region = "ap-northeast-1"
-}
-
-
-provider "random" {
-  # No specific configuration needed for random provider
 }
