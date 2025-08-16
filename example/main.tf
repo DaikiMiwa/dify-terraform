@@ -15,7 +15,7 @@ provider "aws" {
 # Local values
 locals {
   base_name = "dify-test"
-  
+
   default_tags = {
     Project     = "dify"
     Environment = "test"
@@ -53,7 +53,7 @@ resource "aws_internet_gateway" "main" {
 # Elastic IP for NAT Gateway
 resource "aws_eip" "nat" {
   domain = "vpc"
-  
+
   depends_on = [aws_internet_gateway.main]
 
   tags = merge(
@@ -64,17 +64,19 @@ resource "aws_eip" "nat" {
   )
 }
 
-# Public Subnet
+# Public Subnets
 resource "aws_subnet" "public" {
+  count = 2
+
   vpc_id                  = aws_vpc.main.id
-  cidr_block              = var.public_subnet_cidr
-  availability_zone       = data.aws_availability_zones.available.names[0]
+  cidr_block              = var.public_subnet_cidrs[count.index]
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
 
   tags = merge(
     local.default_tags,
     {
-      Name = "subnet-${local.base_name}-public-001"
+      Name = "subnet-${local.base_name}-public-00${count.index + 1}"
       Type = "Public"
     }
   )
@@ -100,7 +102,7 @@ resource "aws_subnet" "private" {
 # NAT Gateway
 resource "aws_nat_gateway" "main" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public.id
+  subnet_id     = aws_subnet.public[0].id
 
   depends_on = [aws_internet_gateway.main]
 
@@ -148,7 +150,9 @@ resource "aws_route_table" "private" {
 
 # Route Table Associations
 resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
+  count = 2
+
+  subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
@@ -161,11 +165,11 @@ resource "aws_route_table_association" "private" {
 
 # S3 VPC Endpoint
 resource "aws_vpc_endpoint" "s3" {
-  vpc_id              = aws_vpc.main.id
-  service_name        = "com.amazonaws.${var.region}.s3"
-  vpc_endpoint_type   = "Gateway"
-  route_table_ids     = [aws_route_table.private.id, aws_route_table.public.id]
-  policy              = data.aws_iam_policy_document.s3_endpoint_policy.json
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${var.region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.private.id, aws_route_table.public.id]
+  policy            = data.aws_iam_policy_document.s3_endpoint_policy.json
 
   tags = merge(
     local.default_tags,
@@ -210,6 +214,24 @@ resource "aws_vpc_endpoint" "ecr_api" {
   )
 }
 
+# CloudWatch Logs VPC Endpoint
+resource "aws_vpc_endpoint" "logs" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.logs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+  policy              = data.aws_iam_policy_document.logs_endpoint_policy.json
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-logs-001"
+    }
+  )
+}
+
 # Security Group for VPC Endpoints
 resource "aws_security_group" "vpc_endpoint" {
   description = "Security group for VPC endpoints"
@@ -219,16 +241,8 @@ resource "aws_security_group" "vpc_endpoint" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [aws_vpc.main.cidr_block]
-    description = "HTTPS from VPC"
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "All outbound traffic"
+    cidr_blocks  = [var.vpc_cidr_block]
+    description = "Allow all traffic within VPC"
   }
 
   tags = merge(
@@ -239,6 +253,7 @@ resource "aws_security_group" "vpc_endpoint" {
   )
 }
 
+
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
@@ -247,19 +262,19 @@ data "aws_availability_zones" "available" {
 data "aws_iam_policy_document" "s3_endpoint_policy" {
   statement {
     effect = "Allow"
-    
+
     principals {
       type        = "*"
       identifiers = ["*"]
     }
-    
+
     actions = [
       "s3:GetObject",
       "s3:PutObject",
       "s3:DeleteObject",
       "s3:ListBucket"
     ]
-    
+
     resources = ["*"]
   }
 }
@@ -267,19 +282,40 @@ data "aws_iam_policy_document" "s3_endpoint_policy" {
 data "aws_iam_policy_document" "ecr_endpoint_policy" {
   statement {
     effect = "Allow"
-    
+
     principals {
       type        = "*"
       identifiers = ["*"]
     }
-    
+
     actions = [
       "ecr:GetAuthorizationToken",
       "ecr:BatchCheckLayerAvailability",
       "ecr:GetDownloadUrlForLayer",
       "ecr:BatchGetImage"
     ]
-    
+
+    resources = ["*"]
+  }
+}
+
+data "aws_iam_policy_document" "logs_endpoint_policy" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams"
+    ]
+
     resources = ["*"]
   }
 }
@@ -292,11 +328,9 @@ module "dify" {
   vpc_id             = aws_vpc.main.id
   vpc_cidr_block     = aws_vpc.main.cidr_block
   private_subnet_ids = aws_subnet.private[*].id
-  public_subnet_ids  = [aws_subnet.public.id]
-  
-  default_tags = {
-    default = local.default_tags
-  }
-  
+  public_subnet_ids  = aws_subnet.public[*].id
+
+  default_tags = local.default_tags
+
   base_name = local.base_name
 }
