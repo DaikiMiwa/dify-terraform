@@ -11,7 +11,7 @@ resource "aws_security_group" "dify_worker" {
   tags = merge(
     var.default_tags,
     {
-      Name = "sg-${local.base_name}-dify-worker-001"
+      Name = "${local.base_name}-sg-worker"
     }
   )
 }
@@ -24,11 +24,21 @@ resource "aws_security_group_rule" "dify_worker_ingress_alb" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_alb.id
   description              = "Allow inbound traffic from ALB"
-  
+
   security_group_id = aws_security_group.dify_worker.id
 }
 
 # Worker egress rules
+resource "aws_security_group_rule" "dify_worker_egress_https" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "HTTPS to internet and VPC endpoints"
+}
+
 resource "aws_security_group_rule" "dify_worker_egress_aurora" {
   type                     = "egress"
   from_port                = 5432
@@ -36,7 +46,7 @@ resource "aws_security_group_rule" "dify_worker_egress_aurora" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.aurora.id
   description              = "Allow outbound traffict to aurora"
-  
+
   security_group_id = aws_security_group.dify_worker.id
 }
 
@@ -47,8 +57,30 @@ resource "aws_security_group_rule" "dify_worker_egress_valkey" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.valkey.id
   description              = "Allow outbound traffict to elastic cache"
-  
+
   security_group_id = aws_security_group.dify_worker.id
+}
+
+resource "aws_security_group_rule" "dify_worker_egress_http" {
+  type        = "egress"
+  from_port   = 80
+  to_port     = 80
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+  description = "Allow HTTP outbound traffic"
+
+  security_group_id = aws_security_group.dify_worker.id
+}
+
+resource "aws_security_group_rule" "dify_worker_egress_efs" {
+  type                     = "egress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.dify_worker.id
+  source_security_group_id = aws_security_group.efs.id
+
+  description = "Allow NFS traffic from ECS tasks to EFS"
 }
 
 resource "aws_ecs_task_definition" "dify_worker" {
@@ -70,6 +102,18 @@ resource "aws_ecs_task_definition" "dify_worker" {
     create_before_destroy = true
   }
 
+  volume {
+    name = "efs-certs"
+    efs_volume_configuration {
+      file_system_id     = aws_efs_file_system.this.id
+      transit_encryption = "ENABLED"
+      authorization_config {
+        access_point_id = aws_efs_access_point.certs.id
+        iam             = "ENABLED"
+      }
+    }
+  }
+
   # TODO : Write enviroment variables for worker tasks
   container_definitions = jsonencode([
     {
@@ -79,8 +123,8 @@ resource "aws_ecs_task_definition" "dify_worker" {
 
       portMappings = [
         {
-          containerPort = 5002
-          hostPort      = 5002
+          containerPort = 5001
+          hostPort      = 5001
           protocol      = "tcp"
         }
       ]
@@ -101,10 +145,11 @@ resource "aws_ecs_task_definition" "dify_worker" {
           DB_PORT = "5432"
 
           # Redis settings
-          REDIS_HOST    = aws_elasticache_serverless_cache.this.endpoint[0].address
-          REDIS_PORT    = "6379"
-          REDIS_DB      = 0
-          REDIS_USE_SSL = "true"
+          REDIS_HOST     = aws_elasticache_serverless_cache.this.endpoint[0].address
+          REDIS_PORT     = "6379"
+          REDIS_DB       = 0
+          REDIS_USE_SSL  = "true"
+          REDIS_USERNAME = aws_elasticache_user.app_user.user_name
 
           # Celery settings
           CELERY_BACKEND = "redis"
@@ -125,6 +170,20 @@ resource "aws_ecs_task_definition" "dify_worker" {
           WEB_API_CORS_ALLOW_ORIGINS = "*"
           CONSOLE_CORS_ALLOW_ORIGINS = "*"
 
+          # PostgreSQL DB - non-secret values
+          DB_USERNAME = aws_rds_cluster.aurora.master_username
+          DB_DATABASE = aws_rds_cluster.aurora.database_name
+          PGSSLMODE = "verify-full"
+          PGSSLROOTCERT = "${local.ca_path_in_container}"
+
+          # Vector Store(pgvector same as DB) - non-secret values
+          PGVECTOR_USER     = aws_rds_cluster.aurora.master_username
+          PGVECTOR_DATABASE = aws_rds_cluster.aurora.database_name
+          PGVECTOR_PG_BIGM  = "true"
+
+          # Storage
+          S3_BUCKET_NAME = aws_s3_bucket.dify_data.bucket
+
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -132,27 +191,28 @@ resource "aws_ecs_task_definition" "dify_worker" {
           # SECRET_KEY for dify
           SECRET_KEY = aws_secretsmanager_secret.dify_secret_key.arn
 
-          # PostgreSQL DB
-          DB_USERNAME = aws_rds_cluster.aurora.master_username
-          DB_PASSWORD = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
-          DB_DATABASE = "dify"
+          # PostgreSQL DB - secret values only
+          DB_PASSWORD = aws_secretsmanager_secret.db_password.arn
+          SQLALCHEMY_DATABASE_URI = aws_secretsmanager_secret.sql_uri.arn
 
           # Redis Settings
           REDIS_PASSWORD = aws_secretsmanager_secret.valkey_password_secret.arn
 
           # Celery settings
           # The format is like redis://<redis_username>:<redis_password>@<redis_host>:<redis_port>/<redis_database>
-          CELERY_BROKER_URL = "redis://${aws_elasticache_user.app_user.user_name}:${random_password.valkey_password.result}@${aws_elasticache_serverless_cache.this.endpoint[0].address}:6379/1"
+          CELERY_BROKER_URL = aws_secretsmanager_secret.celery_broker_url_secret.arn
 
-          # Vector Store(pgvector same as DB)
-          PGVECTOR_USER     = aws_rds_cluster.aurora.master_username
-          PGVECTOR_PASSWORD = aws_rds_cluster.aurora.master_user_secret[0].secret_arn
-          PGVECTOR_DATABASE = "dify"
-          PGVECTOR_PG_BIGM  = "true"
+          # Vector Store(pgvector same as DB) - secret values only
+          PGVECTOR_PASSWORD = aws_secretsmanager_secret.db_password.arn
 
-          # Storage
-          S3_BUCKET_NAME = aws_s3_bucket.dify_data.bucket
         } : { name = name, valueFrom = value }
+      ]
+      mountPoints = [
+        {
+          sourceVolume  = "efs-certs",
+          containerPath = var.container_cert_mount_path,
+          readOnly      = true
+        }
       ]
       logConfiguration = {
         logDriver = "awslogs"
@@ -175,8 +235,9 @@ resource "aws_ecs_service" "dify_worker" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.private_subnet_ids
-    security_groups = [aws_security_group.dify_worker.id]
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.dify_worker.id]
+    assign_public_ip = false
   }
 }
 

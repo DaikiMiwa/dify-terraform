@@ -10,7 +10,7 @@ resource "aws_security_group" "valkey" {
   tags = merge(
     var.default_tags,
     {
-      Name = "sg-${local.base_name}-valkey-001"
+      Name = "${local.base_name}-sg-valkey"
     }
   )
 }
@@ -69,12 +69,29 @@ resource "random_password" "valkey_password" {
 }
 
 resource "aws_secretsmanager_secret" "valkey_password_secret" {
-  name = "elasticache/valkey/app-user-password"
+  name                    = "elasticache/valkey/app-user-password"
+  recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "valkey_password_secret_version" {
   secret_id     = aws_secretsmanager_secret.valkey_password_secret.id
   secret_string = random_password.valkey_password.result
+}
+
+resource "aws_secretsmanager_secret" "celery_broker_url_secret" {
+  name                    = "elasticache/valkey/celery-broker-url"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "celery_broker_url_secret_version" {
+  secret_id = aws_secretsmanager_secret.celery_broker_url_secret.id
+  secret_string = "redis://${aws_elasticache_user.app_user.user_name}:${random_password.valkey_password.result}@${aws_elasticache_serverless_cache.this.endpoint[0].address}:6379/1"
+  
+  depends_on = [
+    aws_elasticache_serverless_cache.this,
+    aws_elasticache_user.app_user,
+    random_password.valkey_password
+  ]
 }
 
 resource "aws_elasticache_user" "app_user" {

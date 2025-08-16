@@ -28,12 +28,7 @@ variable "public_subnet_ids" {
 
 variable "default_tags" {
   description = "Default tags to apply to all resources"
-  type = map(object({
-    Project     = string
-    Environment = string
-    IaC         = string
-    airid       = string
-  }))
+  type        = map(string)
 }
 
 variable "base_name" {
@@ -55,4 +50,18 @@ variable "aws_rds_cluster_scaling_configuration" {
     max_capacity              = 1
     seconds_until_auto_pause  = 300
   }
+}
+
+# EFS 上の配置と、コンテナ側のマウント先
+variable "efs_root_directory" {
+  type    = string
+  default = "/certs"
+}
+variable "efs_ca_filename" {
+  type    = string
+  default = "rds-ca.pem" # ap-northeast-1-bundle をこのファイル名で置く想定
+}
+variable "container_cert_mount_path" {
+  type    = string
+  default = "/etc/ssl/dify-certs"
 }

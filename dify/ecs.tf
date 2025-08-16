@@ -80,7 +80,23 @@ data "aws_iam_policy_document" "dify_task_execution_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*"
+      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "ssm:GetParameters",
+      "ssm:GetParameter"
+    ]
+
+    resources = [
+      "arn:aws:ssm:*:*:parameter/dify/*",
+      "arn:aws:ssm:*:*:parameter/dify"
     ]
   }
 }
@@ -143,8 +159,37 @@ data "aws_iam_policy_document" "dify_api_task_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*"
+      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
     ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "ssm:GetParameters",
+      "ssm:GetParameter"
+    ]
+
+    resources = [
+      "arn:aws:ssm:*:*:parameter/dify/*",
+      "arn:aws:ssm:*:*:parameter/dify"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "ssmmessages:CreateControlChannel",
+      "ssmmessages:CreateDataChannel",
+      "ssmmessages:OpenControlChannel",
+      "ssmmessages:OpenDataChannel"
+    ]
+
+    resources = ["*"]
   }
 }
 
@@ -202,7 +247,23 @@ data "aws_iam_policy_document" "dify_web_task_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*"
+      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "ssm:GetParameters",
+      "ssm:GetParameter"
+    ]
+
+    resources = [
+      "arn:aws:ssm:*:*:parameter/dify/*",
+      "arn:aws:ssm:*:*:parameter/dify"
     ]
   }
 }

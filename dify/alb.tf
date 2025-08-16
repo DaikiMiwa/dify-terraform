@@ -10,7 +10,7 @@ resource "aws_security_group" "dify_alb" {
   tags = merge(
     var.default_tags,
     {
-      Name = "sg-${local.base_name}-dify-alb-001"
+      Name = "${local.base_name}-sg-alb"
     }
   )
 }
@@ -21,7 +21,7 @@ resource "aws_security_group_rule" "dify_alb_ingress_80" {
   from_port   = 80
   to_port     = 80
   protocol    = "tcp"
-  cidr_blocks = [var.vpc_cidr_block]
+  cidr_blocks = ["0.0.0.0/0"]
   description = "Allow inbound traffic on port 80 from VPC CIDR block"
   
   security_group_id = aws_security_group.dify_alb.id
@@ -32,7 +32,7 @@ resource "aws_security_group_rule" "dify_alb_ingress_443" {
   from_port   = 443
   to_port     = 443
   protocol    = "tcp"
-  cidr_blocks = [var.vpc_cidr_block]
+  cidr_blocks = ["0.0.0.0/0"]
   description = "Allow inbound traffic on port 443 from VPC CIDR block"
   
   security_group_id = aws_security_group.dify_alb.id
@@ -63,7 +63,7 @@ resource "aws_security_group_rule" "dify_alb_egress_api" {
 
 resource "aws_alb" "dify_alb" {
   name               = "alb-dify"
-  internal           = true
+  internal           = false
   load_balancer_type = "application"
 
   security_groups = [
@@ -83,27 +83,40 @@ resource "aws_alb" "dify_alb" {
 
 # TODO: Need review
 resource "aws_lb_target_group" "dify_api" {
-  name     = "tg-dify-api"
-  port     = 5001
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
+  name        = "tg-dify-api"
+  port        = 5001
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
 
-  health_check {
-    protocol            = "HTTP"
-    path                = "/health"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
+health_check {
+  enabled             = true
+  healthy_threshold   = 2
+  interval            = 30
+  matcher             = "200"
+  path                = "/health"
+  timeout             = 20
+  unhealthy_threshold = 5
+}
+
+  lifecycle {
+    create_before_destroy = true
   }
 
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "tg-${local.base_name}-dify-api-001"
+    }
+  )
 }
 
 resource "aws_lb_target_group" "dify_web" {
-  name     = "tg-dify-web"
-  port     = 3000
-  protocol = "HTTP"
-  vpc_id   = var.vpc_id
+  name        = "tg-dify-web"
+  port        = 3000
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
 
   health_check {
     path                = "/"
@@ -111,6 +124,11 @@ resource "aws_lb_target_group" "dify_web" {
     timeout             = 10
     healthy_threshold   = 2
     unhealthy_threshold = 2
+    matcher             = "200,307"
+  }
+
+  lifecycle {
+    create_before_destroy = true
   }
 
   tags = merge(
@@ -131,6 +149,11 @@ resource "aws_lb_listener" "https" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.dify_web.arn
   }
+
+  depends_on = [
+    aws_lb_target_group.dify_web,
+    aws_lb_target_group.dify_api
+  ]
 
   tags = merge(
     var.default_tags,
@@ -160,6 +183,11 @@ resource "aws_lb_listener_rule" "dify_api" {
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
 
+  depends_on = [
+    aws_lb_target_group.dify_api,
+    aws_lb_listener.https
+  ]
+
   tags = merge(
     var.default_tags,
     {
@@ -182,6 +210,11 @@ resource "aws_lb_listener_rule" "dify_api_routing" {
     type             = "forward"
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
+
+  depends_on = [
+    aws_lb_target_group.dify_api,
+    aws_lb_listener.https
+  ]
 
   tags = merge(
     var.default_tags,

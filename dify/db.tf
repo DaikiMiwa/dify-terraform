@@ -10,7 +10,7 @@ resource "aws_security_group" "aurora" {
   tags = merge(
     var.default_tags,
     {
-      Name = "sg-${local.base_name}-aurora-001"
+      Name = "${local.base_name}-sg-aurora"
     }
   )
 }
@@ -22,7 +22,7 @@ resource "aws_security_group_rule" "aurora_ingress_api" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_api.id
-  
+
   security_group_id = aws_security_group.aurora.id
 }
 
@@ -32,13 +32,13 @@ resource "aws_security_group_rule" "aurora_ingress_worker" {
   to_port                  = 5432
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_worker.id
-  
+
   security_group_id = aws_security_group.aurora.id
 }
 
 resource "aws_rds_cluster_parameter_group" "aurora" {
   name        = "aurora-cluster-parameter-group-${local.base_name}-001"
-  family      = "aurora-postgresql15"
+  family      = "aurora-postgresql16"
   description = "Aurora cluster parameter group for ${local.base_name}"
 
   # Enforce ssl connection to meets secrurity requirements in ACN
@@ -78,6 +78,8 @@ resource "aws_rds_cluster" "aurora" {
   manage_master_user_password = true
 
   storage_encrypted = true
+  vpc_security_group_ids = [aws_security_group.aurora.id]
+
 
   db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.aurora.name
 

@@ -8,7 +8,7 @@ resource "aws_security_group" "dify_web" {
   tags = merge(
     var.default_tags,
     {
-      Name = "sg-${local.base_name}-dify-web-001"
+      Name = "${local.base_name}-sg-web"
     }
   )
 }
@@ -21,8 +21,39 @@ resource "aws_security_group_rule" "dify_web_ingress_alb" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_alb.id
   description              = "Allow inbound traffic from ALB"
-  
+
   security_group_id = aws_security_group.dify_web.id
+}
+
+# Web egress rules
+resource "aws_security_group_rule" "dify_web_egress_https" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_web.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "HTTPS to internet and VPC endpoints"
+}
+
+resource "aws_security_group_rule" "dify_web_egress_aurora" {
+  type                     = "egress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.dify_web.id
+  source_security_group_id = aws_security_group.aurora.id
+  description              = "Aurora PostgreSQL"
+}
+
+resource "aws_security_group_rule" "dify_web_egress_valkey" {
+  type                     = "egress"
+  from_port                = 6379
+  to_port                  = 6379
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.dify_web.id
+  source_security_group_id = aws_security_group.valkey.id
+  description              = "Valkey"
 }
 
 resource "aws_ecs_task_definition" "dify_web" {
@@ -85,13 +116,14 @@ resource "aws_ecs_service" "dify_web" {
   name            = "dify-web"
   cluster         = aws_ecs_cluster.dify.name
   desired_count   = 1
-  task_definition = aws_ecs_task_definition.dify_worker.arn
+  task_definition = aws_ecs_task_definition.dify_web.arn
   propagate_tags  = "SERVICE"
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets         = var.private_subnet_ids
-    security_groups = [aws_security_group.dify_web.id]
+    subnets          = var.private_subnet_ids
+    security_groups  = [aws_security_group.dify_web.id]
+    assign_public_ip = false
   }
 
   load_balancer {
