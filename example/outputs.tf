@@ -46,3 +46,9 @@ output "dify_ecr_repos" {
   description = "ECR repository URLs from Dify module"
   value       = module.dify.ecr_repo_urls
 }
+
+# Output from the Dify module
+output "dify_efs_id" {
+  description = "ECR repository URLs from Dify module"
+  value       = module.dify.efs_id
+}

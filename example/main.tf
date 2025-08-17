@@ -1,20 +1,5 @@
-terraform {
-  required_version = ">= 1.0"
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 6.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.region
-}
-
-# Local values
 locals {
-  base_name = "dify-test"
+  base_name = "dify-test-001"
 
   default_tags = {
     Project     = "dify"
@@ -241,7 +226,7 @@ resource "aws_security_group" "vpc_endpoint" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks  = [var.vpc_cidr_block]
+    cidr_blocks = [var.vpc_cidr_block]
     description = "Allow all traffic within VPC"
   }
 
