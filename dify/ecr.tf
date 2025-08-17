@@ -5,6 +5,7 @@
 resource "aws_ecr_repository" "dify_web" {
   name                 = "${local.base_name}/dify-web"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   encryption_configuration {
     encryption_type = "AES256"
@@ -26,6 +27,7 @@ resource "aws_ecr_repository" "dify_web" {
 resource "aws_ecr_repository" "dify_api" {
   name                 = "${local.base_name}/dify-api"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   encryption_configuration {
     encryption_type = "AES256"
@@ -47,6 +49,7 @@ resource "aws_ecr_repository" "dify_api" {
 resource "aws_ecr_repository" "dify_sandbox" {
   name                 = "${local.base_name}/dify-sandbox"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   encryption_configuration {
     encryption_type = "AES256"
@@ -68,6 +71,7 @@ resource "aws_ecr_repository" "dify_sandbox" {
 resource "aws_ecr_repository" "dify_plugin_daemon" {
   name                 = "${local.base_name}/dify-plugin_daemon"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   encryption_configuration {
     encryption_type = "AES256"

@@ -39,16 +39,16 @@ variable "base_name" {
 
 variable "aws_rds_cluster_scaling_configuration" {
   description = "Scaling configuration for the RDS cluster"
-  type        = object({
-    min_capacity = number
-    max_capacity = number
+  type = object({
+    min_capacity             = number
+    max_capacity             = number
     seconds_until_auto_pause = number
   })
 
   default = {
-    min_capacity              = 0
-    max_capacity              = 1
-    seconds_until_auto_pause  = 300
+    min_capacity             = 0
+    max_capacity             = 1
+    seconds_until_auto_pause = 300
   }
 }
 
@@ -65,3 +65,4 @@ variable "container_cert_mount_path" {
   type    = string
   default = "/etc/ssl/dify-certs"
 }
+

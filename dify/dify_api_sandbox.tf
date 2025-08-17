@@ -95,7 +95,7 @@ resource "random_password" "dify_secret_key" {
 
 # secrets for dify api
 resource "aws_secretsmanager_secret" "dify_secret_key" {
-  name                    = "ecs/dify/secret-key"
+  name                    = "${local.base_name}/ecs/dify/secret-key"
   recovery_window_in_days = 0
 }
 
@@ -112,7 +112,7 @@ resource "random_password" "dify_sandbox_api_key" {
 
 # secrets for dify sandbox 
 resource "aws_secretsmanager_secret" "dify_sandbox_api_key" {
-  name                    = "ecs/dify/sandbox-api-key"
+  name                    = "${local.base_name}/dify/sandbox-api-key"
   recovery_window_in_days = 0
 }
 
@@ -133,7 +133,7 @@ locals {
 
 # Create separate secret for DB password
 resource "aws_secretsmanager_secret" "db_password" {
-  name                    = "ecs/dify/db-password"
+  name                    = "${local.base_name}/ecs/dify/db-password"
   recovery_window_in_days = 0
 }
 
@@ -152,7 +152,7 @@ locals {
 
 
 resource "aws_secretsmanager_secret" "sql_uri" {
-  name                    = "ecs/dify/sql-uri"
+  name                    = "${local.base_name}/ecs/dify/sql-uri"
   recovery_window_in_days = 0
 }
 
@@ -199,7 +199,7 @@ resource "aws_ecs_task_definition" "dify_api" {
       # use private ECR defined above
       # The image is defined in the ECR repository created above
       image     = "${aws_ecr_repository.dify_api.repository_url}:latest"
-      essential = true
+      essential = false
 
 
       portMappings = [
@@ -301,7 +301,7 @@ resource "aws_ecs_task_definition" "dify_api" {
           CODE_EXECUTION_API_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
 
           # PLUGIN daemon settings
-          PLUGIN_DAEMON_API_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
+          PLUGIN_DAEMON_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
         } : { name = name, valueFrom = value }
 
       ]
@@ -332,7 +332,7 @@ resource "aws_ecs_task_definition" "dify_api" {
     {
       name      = "dify-sandbox"
       image     = "${aws_ecr_repository.dify_sandbox.repository_url}:latest"
-      essential = true
+      essential = false
 
       portMappings = [
         {
@@ -376,13 +376,18 @@ resource "aws_ecs_task_definition" "dify_api" {
     },
     {
       name      = "dify-plugin-daemon"
-      image     = "${aws_ecr_repository.dify_sandbox.repository_url}:latest"
+      image     = "${aws_ecr_repository.dify_plugin_daemon.repository_url}:latest"
       essential = true
 
       portMappings = [
         {
           hostPort      = 5002
           containerPort = 5002
+          protocol      = "tcp"
+        },
+        {
+          hostPort      = 5003
+          containerPort = 5003
           protocol      = "tcp"
         }
       ]
@@ -406,13 +411,17 @@ resource "aws_ecs_task_definition" "dify_api" {
           # Storage settings
           STORAGE_TYPE           = "s3"
           S3_ENDPOINT            = "https://s3.amazonaws.com"
+          S3_BUCKET              = aws_s3_bucket.dify_data.bucket
           AWS_REGION             = var.region
           S3_USE_AWS_MANAGED_IAM = "true"
+
+          PLUGIN_REMOTE_INSTALLING_HOST = "0.0.0.0" # もしくは実ホスト名/FQDN
+          PLUGIN_REMOTE_INSTALLING_PORT = 5003
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
         {
-          name      = "API_KEY"
+          name      = "SERVER_KEY"
           valueFrom = aws_secretsmanager_secret.dify_sandbox_api_key.arn
         },
         {
@@ -433,7 +442,7 @@ resource "aws_ecs_task_definition" "dify_api" {
         }
       }
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8194/health || exit 1"]
+        command     = ["CMD-SHELL", "curl -f http://localhost:5002/health || exit 1"]
         interval    = 60
         timeout     = 10
         retries     = 3

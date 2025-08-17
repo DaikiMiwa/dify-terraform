@@ -23,7 +23,7 @@ resource "aws_security_group_rule" "valkey_ingress_6379_api" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_api.id
   description              = "Allow inbound traffic from private subnets"
-  
+
   security_group_id = aws_security_group.valkey.id
 }
 
@@ -34,7 +34,7 @@ resource "aws_security_group_rule" "valkey_ingress_6379_worker" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_worker.id
   description              = "Allow inbound traffic from private subnets"
-  
+
   security_group_id = aws_security_group.valkey.id
 }
 
@@ -46,7 +46,7 @@ resource "aws_security_group_rule" "valkey_ingress_6380_api" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_api.id
   description              = "Allow inbound traffic from ECS tasks"
-  
+
   security_group_id = aws_security_group.valkey.id
 }
 
@@ -57,7 +57,7 @@ resource "aws_security_group_rule" "valkey_ingress_6380_worker" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_worker.id
   description              = "Allow inbound traffic from ECS tasks"
-  
+
   security_group_id = aws_security_group.valkey.id
 }
 
@@ -69,7 +69,7 @@ resource "random_password" "valkey_password" {
 }
 
 resource "aws_secretsmanager_secret" "valkey_password_secret" {
-  name                    = "elasticache/valkey/app-user-password"
+  name                    = "${local.base_name}/elasticache/valkey/app-user-password"
   recovery_window_in_days = 0
 }
 
@@ -79,14 +79,14 @@ resource "aws_secretsmanager_secret_version" "valkey_password_secret_version" {
 }
 
 resource "aws_secretsmanager_secret" "celery_broker_url_secret" {
-  name                    = "elasticache/valkey/celery-broker-url"
+  name                    = "${local.base_name}/elasticache/valkey/celery-broker-url"
   recovery_window_in_days = 0
 }
 
 resource "aws_secretsmanager_secret_version" "celery_broker_url_secret_version" {
-  secret_id = aws_secretsmanager_secret.celery_broker_url_secret.id
+  secret_id     = aws_secretsmanager_secret.celery_broker_url_secret.id
   secret_string = "redis://${aws_elasticache_user.app_user.user_name}:${random_password.valkey_password.result}@${aws_elasticache_serverless_cache.this.endpoint[0].address}:6379/1"
-  
+
   depends_on = [
     aws_elasticache_serverless_cache.this,
     aws_elasticache_user.app_user,
@@ -95,7 +95,7 @@ resource "aws_secretsmanager_secret_version" "celery_broker_url_secret_version" 
 }
 
 resource "aws_elasticache_user" "app_user" {
-  user_id   = "dify-id"
+  user_id   = "${local.base_name}-dify-id"
   user_name = "dify"
   engine    = "valkey" # もしエラーになる古いProviderなら "redis" を一時的に使用
 
@@ -117,7 +117,7 @@ resource "aws_elasticache_user" "app_user" {
 }
 
 resource "aws_elasticache_user_group" "app_user_group" {
-  user_group_id = "dify-user-group"
+  user_group_id = "${local.base_name}-dify-user-group"
   engine        = "valkey"
 
   user_ids = [aws_elasticache_user.app_user.user_id]

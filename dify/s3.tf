@@ -2,7 +2,8 @@
 # Settings for S3
 # ------------------------------------------------
 resource "aws_s3_bucket" "dify_data" {
-  bucket = "dify-data-${local.base_name}-001"
+  bucket        = "dify-data-${local.base_name}-001"
+  force_destroy = true
 
   tags = merge(
     var.default_tags,

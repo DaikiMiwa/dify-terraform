@@ -23,7 +23,7 @@ resource "aws_security_group_rule" "dify_alb_ingress_80" {
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
   description = "Allow inbound traffic on port 80 from VPC CIDR block"
-  
+
   security_group_id = aws_security_group.dify_alb.id
 }
 
@@ -34,7 +34,7 @@ resource "aws_security_group_rule" "dify_alb_ingress_443" {
   protocol    = "tcp"
   cidr_blocks = ["0.0.0.0/0"]
   description = "Allow inbound traffic on port 443 from VPC CIDR block"
-  
+
   security_group_id = aws_security_group.dify_alb.id
 }
 
@@ -46,7 +46,7 @@ resource "aws_security_group_rule" "dify_alb_egress_web" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_web.id
   description              = "Allow outbound traffic to web tasks"
-  
+
   security_group_id = aws_security_group.dify_alb.id
 }
 
@@ -57,12 +57,12 @@ resource "aws_security_group_rule" "dify_alb_egress_api" {
   protocol                 = "tcp"
   source_security_group_id = aws_security_group.dify_api.id
   description              = "Allow outbound traffic to api tasks"
-  
+
   security_group_id = aws_security_group.dify_alb.id
 }
 
 resource "aws_alb" "dify_alb" {
-  name               = "alb-dify"
+  name               = "alb-${local.base_name}-dify-001"
   internal           = false
   load_balancer_type = "application"
 
@@ -83,21 +83,21 @@ resource "aws_alb" "dify_alb" {
 
 # TODO: Need review
 resource "aws_lb_target_group" "dify_api" {
-  name        = "tg-dify-api"
+  name        = "tg-${local.base_name}-dify-api"
   port        = 5001
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "ip"
 
-health_check {
-  enabled             = true
-  healthy_threshold   = 2
-  interval            = 30
-  matcher             = "200"
-  path                = "/health"
-  timeout             = 20
-  unhealthy_threshold = 5
-}
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/health"
+    timeout             = 20
+    unhealthy_threshold = 5
+  }
 
   lifecycle {
     create_before_destroy = true
@@ -112,7 +112,7 @@ health_check {
 }
 
 resource "aws_lb_target_group" "dify_web" {
-  name        = "tg-dify-web"
+  name        = "tg-${local.base_name}-dify-web"
   port        = 3000
   protocol    = "HTTP"
   vpc_id      = var.vpc_id

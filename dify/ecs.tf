@@ -16,7 +16,7 @@ resource "aws_ecs_cluster" "dify" {
 
 # define the cloudwatch log group for ECS tasks
 resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/ecs/dify"
+  name              = "${local.base_name}/ecs/dify"
   retention_in_days = 7
 
   tags = merge(
@@ -80,8 +80,9 @@ data "aws_iam_policy_document" "dify_task_execution_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
-      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/elasticache/valkey/*",
       "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
     ]
   }
@@ -159,8 +160,9 @@ data "aws_iam_policy_document" "dify_api_task_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
-      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/elasticache/valkey/*",
       "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
     ]
   }
@@ -247,8 +249,9 @@ data "aws_iam_policy_document" "dify_web_task_policy" {
     ]
 
     resources = [
-      "arn:aws:secretsmanager:*:*:secret:ecs/dify/*",
-      "arn:aws:secretsmanager:*:*:secret:elasticache/valkey/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/ecs/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/dify/*",
+      "arn:aws:secretsmanager:*:*:secret:${local.base_name}/elasticache/valkey/*",
       "arn:aws:secretsmanager:*:*:secret:rds!cluster-*"
     ]
   }
