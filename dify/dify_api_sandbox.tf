@@ -255,9 +255,9 @@ resource "aws_ecs_task_definition" "dify_api" {
           CODE_EXECUTION_ENDPOINT = "http://localhost:8194"
 
           # PostgreSQL DB - non-secret values
-          DB_USERNAME = aws_rds_cluster.aurora.master_username
-          DB_DATABASE = aws_rds_cluster.aurora.database_name
-          PGSSLMODE = "verify-full"
+          DB_USERNAME   = aws_rds_cluster.aurora.master_username
+          DB_DATABASE   = aws_rds_cluster.aurora.database_name
+          PGSSLMODE     = "verify-full"
           PGSSLROOTCERT = "${local.ca_path_in_container}"
 
           # Vector Store(pgvector same as DB) - non-secret values
@@ -271,6 +271,9 @@ resource "aws_ecs_task_definition" "dify_api" {
           # migration settings
           MIGRATION_ENABLED = "true"
 
+          # plugin daemon settings
+          PLUGIN_DAEMON_PORT = 5002
+          PLUGIN_DAEMON_URL  = "http://localhost:5002"
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -296,6 +299,9 @@ resource "aws_ecs_task_definition" "dify_api" {
 
           # code execution settings
           CODE_EXECUTION_API_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
+
+          # PLUGIN daemon settings
+          PLUGIN_DAEMON_API_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
         } : { name = name, valueFrom = value }
 
       ]
@@ -321,7 +327,7 @@ resource "aws_ecs_task_definition" "dify_api" {
         retries     = 5
         startPeriod = 120
       }
-      cpu         = 0
+      cpu = 0
     },
     {
       name      = "dify-sandbox"
@@ -366,7 +372,74 @@ resource "aws_ecs_task_definition" "dify_api" {
         retries     = 3
         startPeriod = 60
       }
-      cpu        = 0
+      cpu = 0
+    },
+    {
+      name      = "dify-plugin-daemon"
+      image     = "${aws_ecr_repository.dify_sandbox.repository_url}:latest"
+      essential = true
+
+      portMappings = [
+        {
+          hostPort      = 5002
+          containerPort = 5002
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        for name, value in {
+          # Plugin daemon settings
+          SERVER_PORT        = 5002
+          GIN_MODE           = "release"
+          DIFY_INNER_API_URL = "http://localhost:5001"
+
+          # PostgreSQL DB settings
+          DB_HOST     = aws_rds_cluster.aurora.endpoint
+          DB_PORT     = "5432"
+          DB_USERNAME = aws_rds_cluster.aurora.master_username
+          DB_DATABASE = aws_rds_cluster.aurora.database_name
+          DB_SSLMODE  = "verify-full"
+          SSLMODE     = "verify-full"
+          SSLROOTCERT = local.ca_path_in_container
+
+          # Storage settings
+          STORAGE_TYPE           = "s3"
+          S3_ENDPOINT            = "https://s3.amazonaws.com"
+          AWS_REGION             = var.region
+          S3_USE_AWS_MANAGED_IAM = "true"
+        } : { name = name, value = tostring(value) }
+      ]
+      secrets = [
+        {
+          name      = "API_KEY"
+          valueFrom = aws_secretsmanager_secret.dify_sandbox_api_key.arn
+        },
+        {
+          name      = "DIFY_INNER_API_KEY"
+          valueFrom = aws_secretsmanager_secret.dify_secret_key.arn
+        },
+        {
+          name      = "DB_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.db_password.arn
+        }
+      ]
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
+          "awslogs-region"        = var.region
+          "awslogs-stream-prefix" = "dify-sandbox"
+        }
+      }
+      healthCheck = {
+        command     = ["CMD-SHELL", "curl -f http://localhost:8194/health || exit 1"]
+        interval    = 60
+        timeout     = 10
+        retries     = 3
+        startPeriod = 60
+      }
+      cpu = 0
     }
   ])
 
@@ -380,13 +453,13 @@ resource "aws_ecs_task_definition" "dify_api" {
 
 # ECS Service
 resource "aws_ecs_service" "dify_api" {
-  depends_on           = [aws_lb_listener_rule.dify_api]
-  name                 = "dify-api"
-  cluster              = aws_ecs_cluster.dify.name
-  desired_count        = 1
-  task_definition      = aws_ecs_task_definition.dify_api.arn
-  propagate_tags       = "SERVICE"
-  launch_type          = "FARGATE"
+  depends_on             = [aws_lb_listener_rule.dify_api]
+  name                   = "dify-api"
+  cluster                = aws_ecs_cluster.dify.name
+  desired_count          = 1
+  task_definition        = aws_ecs_task_definition.dify_api.arn
+  propagate_tags         = "SERVICE"
+  launch_type            = "FARGATE"
   enable_execute_command = true
 
   network_configuration {

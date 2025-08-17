@@ -64,3 +64,24 @@ resource "aws_ecr_repository" "dify_sandbox" {
   )
 }
 
+# private ecr for dify containers 
+resource "aws_ecr_repository" "dify_plugin_daemon" {
+  name                 = "${local.base_name}/dify-plugin_daemon"
+  image_tag_mutability = "MUTABLE"
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "ecr-repo-${local.base_name}-dify-plugin-daemon-001"
+    }
+  )
+}
+
