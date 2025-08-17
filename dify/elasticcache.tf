@@ -85,7 +85,7 @@ resource "aws_secretsmanager_secret" "celery_broker_url_secret" {
 
 resource "aws_secretsmanager_secret_version" "celery_broker_url_secret_version" {
   secret_id     = aws_secretsmanager_secret.celery_broker_url_secret.id
-  secret_string = "redis://${aws_elasticache_user.app_user.user_name}:${random_password.valkey_password.result}@${aws_elasticache_serverless_cache.this.endpoint[0].address}:6379/1"
+  secret_string = "redis://${aws_elasticache_user.app_user.user_name}:${urlencode(random_password.valkey_password.result)}@${aws_elasticache_serverless_cache.this.endpoint[0].address}:6379/0"
 
   depends_on = [
     aws_elasticache_serverless_cache.this,

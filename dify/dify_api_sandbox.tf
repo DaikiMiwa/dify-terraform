@@ -400,13 +400,13 @@ resource "aws_ecs_task_definition" "dify_api" {
           DIFY_INNER_API_URL = "http://localhost:5001"
 
           # PostgreSQL DB settings
-          DB_HOST     = aws_rds_cluster.aurora.endpoint
-          DB_PORT     = "5432"
-          DB_USERNAME = aws_rds_cluster.aurora.master_username
-          DB_DATABASE = aws_rds_cluster.aurora.database_name
-          DB_SSLMODE  = "verify-full"
-          SSLMODE     = "verify-full"
-          SSLROOTCERT = local.ca_path_in_container
+          DB_HOST        = aws_rds_cluster.aurora.endpoint
+          DB_PORT        = "5432"
+          DB_USERNAME    = aws_rds_cluster.aurora.master_username
+          DB_DATABASE    = aws_rds_cluster.aurora.database_name
+          DB_SSL_MODE    = "require"
+          SSLMODE        = "verify-full"
+          DB_SSLROOTCERT = local.ca_path_in_container
 
           # Storage settings
           STORAGE_TYPE           = "s3"
@@ -417,6 +417,15 @@ resource "aws_ecs_task_definition" "dify_api" {
 
           PLUGIN_REMOTE_INSTALLING_HOST = "0.0.0.0" # もしくは実ホスト名/FQDN
           PLUGIN_REMOTE_INSTALLING_PORT = 5003
+          PLUGIN_WORKING_PATH           = "/app/storage/cwd"
+
+          # Redis settings
+          REDIS_HOST     = aws_elasticache_serverless_cache.this.endpoint[0].address
+          REDIS_PORT     = "6379"
+          REDIS_DB       = 0
+          REDIS_USE_SSL  = "true"
+          REDIS_USERNAME = aws_elasticache_user.app_user.user_name
+
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -431,6 +440,10 @@ resource "aws_ecs_task_definition" "dify_api" {
         {
           name      = "DB_PASSWORD"
           valueFrom = aws_secretsmanager_secret.db_password.arn
+        },
+        {
+          name      = "REDIS_PASSWORD"
+          valueFrom = aws_secretsmanager_secret.valkey_password_secret.arn
         }
       ]
       logConfiguration = {
@@ -441,13 +454,13 @@ resource "aws_ecs_task_definition" "dify_api" {
           "awslogs-stream-prefix" = "dify-sandbox"
         }
       }
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:5002/health || exit 1"]
-        interval    = 60
-        timeout     = 10
-        retries     = 3
-        startPeriod = 60
-      }
+      mountPoints = [
+        {
+          sourceVolume  = "efs-certs",
+          containerPath = var.container_cert_mount_path,
+          readOnly      = true
+        }
+      ]
       cpu = 0
     }
   ])

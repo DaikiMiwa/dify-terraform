@@ -144,12 +144,27 @@ data "aws_iam_policy_document" "dify_api_task_policy" {
 
     actions = [
       "bedrock:InvokeModel",
-      "bedrock:InvokeModelWithResponseStream"
+      "bedrock:InvokeModelWithResponseStream",
+      "bedrock:ListFoundationModels",
+      "bedrock:GetInferenceProfile",
+      "bedrock:ListInferenceProfiles"
     ]
 
     resources = [
-      "arn:aws:bedrock:*::foundation-model/*"
+      "arn:aws:bedrock:*::foundation-model/*",
+      "arn:aws:bedrock:*:*:inference-profile/*"
     ]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "bedrock:ListFoundationModels",
+      "bedrock:ListInferenceProfiles"
+    ]
+
+    resources = ["*"]
   }
 
   statement {
