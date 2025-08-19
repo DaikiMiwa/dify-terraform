@@ -50,39 +50,6 @@ resource "aws_security_group_rule" "valkey_ingress_6379_plugin_daemon" {
   security_group_id = aws_security_group.valkey.id
 }
 
-# Valkey ingress rules for port 6380
-resource "aws_security_group_rule" "valkey_ingress_6380_api" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_api.id
-  description              = "Allow inbound traffic from ECS tasks"
-
-  security_group_id = aws_security_group.valkey.id
-}
-
-resource "aws_security_group_rule" "valkey_ingress_6380_worker" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_worker.id
-  description              = "Allow inbound traffic from ECS tasks"
-
-  security_group_id = aws_security_group.valkey.id
-}
-
-resource "aws_security_group_rule" "valkey_ingress_6380_plugin_daemon" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_plugin_daemon.id
-  description              = "Allow inbound traffic from plugin daemon"
-
-  security_group_id = aws_security_group.valkey.id
-}
 
 # settings for valkey user for dify
 resource "random_password" "valkey_password" {
