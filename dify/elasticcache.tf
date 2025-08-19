@@ -2,6 +2,7 @@
 # Settings for ElastiCache for Valkey
 # ------------------------------------------------
 resource "aws_security_group" "valkey" {
+  name        = "${local.base_name}-valkey-001-sg"
   description = "Security group for Valkey cluster with SSL enforcement"
   vpc_id      = var.vpc_id
 
@@ -10,7 +11,7 @@ resource "aws_security_group" "valkey" {
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-valkey"
+      Name = "sg-${local.base_name}-valkey-001"
     }
   )
 }
@@ -208,9 +209,11 @@ resource "aws_elasticache_replication_group" "this" {
   security_group_ids = [aws_security_group.valkey.id]
 
   # Auth settings
-  user_group_ids             = [aws_elasticache_user_group.app_user_group.id]
+  user_group_ids = [aws_elasticache_user_group.app_user_group.id]
+
   transit_encryption_enabled = true
   at_rest_encryption_enabled = true
+  transit_encryption_mode    = "required"
 
   # Maintenance
   auto_minor_version_upgrade = true

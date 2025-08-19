@@ -80,7 +80,7 @@ variable "route_table_ids" {
 }
 
 variable "enable_vpc_endpoints" {
-  description = "Whether to create VPC endpoints. Set to false if VPC endpoints already exist to avoid conflicts."
+  description = "Whether to enable VPC endpoints for AWS services. Set to false to use NAT Gateway instead."
   type        = bool
   default     = false
 }
