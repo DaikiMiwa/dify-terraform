@@ -100,6 +100,21 @@ data "aws_iam_policy_document" "dify_task_execution_policy" {
       "arn:aws:ssm:*:*:parameter/dify"
     ]
   }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "elasticfilesystem:ClientMount",
+      "elasticfilesystem:ClientWrite",
+      "elasticfilesystem:ClientRootAccess",
+      "elasticfilesystem:DescribeFileSystems",
+      "elasticfilesystem:DescribeAccessPoints",
+      "elasticfilesystem:DescribeMountTargets"
+    ]
+
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role" "dify_task_execution_role" {
@@ -162,6 +177,16 @@ data "aws_iam_policy_document" "dify_api_task_policy" {
     actions = [
       "bedrock:ListFoundationModels",
       "bedrock:ListInferenceProfiles"
+    ]
+
+    resources = ["*"]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "bedrock:Rerank"
     ]
 
     resources = ["*"]
@@ -302,4 +327,50 @@ resource "aws_iam_role_policy" "dify_web_task_policy" {
   name   = "dify-web-task-policy-${local.base_name}-001"
   role   = aws_iam_role.dify_web_task_role.id
   policy = data.aws_iam_policy_document.dify_web_task_policy.json
+}
+
+# Sandbox task role - minimal permissions for sandbox
+data "aws_iam_policy_document" "dify_sandbox_task_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+data "aws_iam_policy_document" "dify_sandbox_task_policy" {
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "secretsmanager:GetSecretValue"
+    ]
+
+    resources = [
+      aws_secretsmanager_secret.dify_sandbox_api_key.arn
+    ]
+  }
+}
+
+resource "aws_iam_role" "dify_sandbox_task_role" {
+  name               = "dify-sandbox-task-role-${local.base_name}-001"
+  assume_role_policy = data.aws_iam_policy_document.dify_sandbox_task_assume_role.json
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "iam-role-${local.base_name}-dify-sandbox-task-001"
+    }
+  )
+}
+
+resource "aws_iam_role_policy" "dify_sandbox_task_policy" {
+  name   = "dify-sandbox-task-policy-${local.base_name}-001"
+  role   = aws_iam_role.dify_sandbox_task_role.id
+  policy = data.aws_iam_policy_document.dify_sandbox_task_policy.json
 }

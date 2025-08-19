@@ -30,15 +30,36 @@ output "nat_gateway_id" {
 
 output "s3_vpc_endpoint_id" {
   description = "ID of the S3 VPC Endpoint"
-  value       = aws_vpc_endpoint.s3.id
+  value       = var.create_vpc_endpoints ? aws_vpc_endpoint.s3[0].id : null
 }
 
 output "ecr_vpc_endpoint_ids" {
   description = "IDs of the ECR VPC Endpoints"
-  value = {
-    dkr = aws_vpc_endpoint.ecr_dkr.id
-    api = aws_vpc_endpoint.ecr_api.id
-  }
+  value = var.create_vpc_endpoints ? {
+    dkr = aws_vpc_endpoint.ecr_dkr[0].id
+    api = aws_vpc_endpoint.ecr_api[0].id
+  } : {}
+}
+
+output "cloudwatch_vpc_endpoint_ids" {
+  description = "CloudWatch VPC Endpoint IDs"
+  value = var.create_vpc_endpoints ? {
+    logs       = aws_vpc_endpoint.logs[0].id
+    monitoring = aws_vpc_endpoint.monitoring[0].id
+  } : {}
+}
+
+output "bedrock_vpc_endpoint_ids" {
+  description = "Bedrock VPC Endpoint IDs"
+  value = var.create_vpc_endpoints ? {
+    bedrock         = aws_vpc_endpoint.bedrock[0].id
+    bedrock_runtime = aws_vpc_endpoint.bedrock_runtime[0].id
+  } : {}
+}
+
+output "secretsmanager_vpc_endpoint_id" {
+  description = "Secrets Manager VPC Endpoint ID"
+  value       = var.create_vpc_endpoints ? aws_vpc_endpoint.secretsmanager[0].id : null
 }
 
 # Output from the Dify module
@@ -49,6 +70,20 @@ output "dify_ecr_repos" {
 
 # Output from the Dify module
 output "dify_efs_id" {
-  description = "ECR repository URLs from Dify module"
+  description = "EFS ID from Dify module"
   value       = module.dify.efs_id
 }
+
+# ElastiCache outputs from the Dify module
+output "dify_elasticache_endpoints" {
+  description = "ElastiCache endpoints from Dify module"
+  value       = module.dify.elasticache_endpoints
+}
+
+output "dify_elasticache_secrets" {
+  description = "ElastiCache secrets ARNs from Dify module"
+  value       = module.dify.elasticache_secrets
+}
+
+# Note: VPC Endpoints are now managed in this file (example/main.tf)
+# instead of being managed by the dify module

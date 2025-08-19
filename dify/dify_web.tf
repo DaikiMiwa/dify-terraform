@@ -26,16 +26,6 @@ resource "aws_security_group_rule" "dify_web_ingress_alb" {
 }
 
 # Web egress rules
-resource "aws_security_group_rule" "dify_web_egress_https" {
-  type              = "egress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  security_group_id = aws_security_group.dify_web.id
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTPS to internet and VPC endpoints"
-}
-
 resource "aws_security_group_rule" "dify_web_egress_aurora" {
   type                     = "egress"
   from_port                = 5432
@@ -54,6 +44,50 @@ resource "aws_security_group_rule" "dify_web_egress_valkey" {
   security_group_id        = aws_security_group.dify_web.id
   source_security_group_id = aws_security_group.valkey.id
   description              = "Valkey"
+}
+
+# VPC Endpoints への HTTPS 通信を許可
+resource "aws_security_group_rule" "dify_web_egress_vpc_endpoints" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_web.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTPS to VPC endpoints for CloudWatch Logs, ECR, Secrets Manager"
+}
+
+# VPC Endpoints への HTTP 通信を許可（ECR等で必要）
+resource "aws_security_group_rule" "dify_web_egress_vpc_endpoints_http" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_web.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTP to VPC endpoints for ECR, S3"
+}
+
+# Allow Web task to reach the internet-facing ALB over HTTP via NAT (for intra-service calls using ALB DNS)
+resource "aws_security_group_rule" "dify_web_egress_http_internet" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_web.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow HTTP egress to ALB/public endpoints (required when using internet-facing ALB DNS)"
+}
+
+# S3 Gateway Endpoint access via prefix list
+resource "aws_security_group_rule" "dify_web_egress_s3_prefix_list" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_web.id
+  prefix_list_ids   = ["pl-61a54008"]
+  description       = "Allow HTTPS to S3 via prefix list"
 }
 
 resource "aws_ecs_task_definition" "dify_web" {
@@ -102,6 +136,7 @@ resource "aws_ecs_task_definition" "dify_web" {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "dify-web"
+          "awslogs-create-group"  = "true"
         }
       }
       cpu         = 0

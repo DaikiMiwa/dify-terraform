@@ -11,3 +11,22 @@ output "ecr_repo_urls" {
 output "efs_id" {
   value = aws_efs_file_system.this.id
 }
+
+# ElastiCache outputs
+output "elasticache_endpoints" {
+  value = {
+    main_cache   = aws_elasticache_replication_group.this.primary_endpoint_address
+    celery_cache = aws_elasticache_replication_group.this.primary_endpoint_address
+  }
+}
+
+output "elasticache_secrets" {
+  value = {
+    celery_broker_url_secret_arn = aws_secretsmanager_secret.celery_broker_url_secret.arn
+    main_cache_password_secret_arn = aws_secretsmanager_secret.valkey_password_secret.arn
+    celery_cache_password_secret_arn = aws_secretsmanager_secret.celery_valkey_password_secret.arn
+  }
+}
+
+# Note: VPC Endpoints outputs have been moved to example/outputs.tf
+# since all VPC endpoints are now managed in the example directory

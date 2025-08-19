@@ -36,6 +36,16 @@ resource "aws_security_group_rule" "aurora_ingress_worker" {
   security_group_id = aws_security_group.aurora.id
 }
 
+resource "aws_security_group_rule" "aurora_ingress_plugin_daemon" {
+  type                     = "ingress"
+  from_port                = 5432
+  to_port                  = 5432
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+
+  security_group_id = aws_security_group.aurora.id
+}
+
 resource "aws_rds_cluster_parameter_group" "aurora" {
   name        = "aurora-cluster-parameter-group-${local.base_name}-001"
   family      = "aurora-postgresql16"
@@ -45,6 +55,12 @@ resource "aws_rds_cluster_parameter_group" "aurora" {
   parameter {
     name  = "rds.force_ssl"
     value = "1"
+  }
+
+  # Enable pgvector extension
+  parameter {
+    name  = "shared_preload_libraries"
+    value = "vector"
   }
 
   tags = merge(
@@ -79,6 +95,8 @@ resource "aws_rds_cluster" "aurora" {
 
   storage_encrypted = true
   vpc_security_group_ids = [aws_security_group.aurora.id]
+  
+  enable_http_endpoint = true
 
 
   db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.aurora.name

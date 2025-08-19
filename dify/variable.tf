@@ -57,12 +57,31 @@ variable "efs_root_directory" {
   type    = string
   default = "/certs"
 }
+
 variable "efs_ca_filename" {
   type    = string
   default = "rds-ca.pem" # ap-northeast-1-bundle をこのファイル名で置く想定
 }
+
+variable "efs_ca_ec" {
+  type    = string
+  default = "ec-ca.pem" # ap-northeast-1-bundle をこのファイル名で置く想定
+}
+
 variable "container_cert_mount_path" {
   type    = string
   default = "/etc/ssl/dify-certs"
+}
+
+variable "route_table_ids" {
+  description = "A list of route table IDs for Gateway VPC endpoints"
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_vpc_endpoints" {
+  description = "Whether to create VPC endpoints. Set to false if VPC endpoints already exist to avoid conflicts."
+  type        = bool
+  default     = false
 }
 

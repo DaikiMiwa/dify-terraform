@@ -61,6 +61,39 @@ resource "aws_security_group_rule" "dify_alb_egress_api" {
   security_group_id = aws_security_group.dify_alb.id
 }
 
+resource "aws_security_group_rule" "dify_alb_egress_plugin_daemon" {
+  type                     = "egress"
+  from_port                = 5002
+  to_port                  = 5002
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+  description              = "Allow outbound traffic to plugin daemon tasks"
+
+  security_group_id = aws_security_group.dify_alb.id
+}
+
+resource "aws_security_group_rule" "dify_alb_egress_plugin_install" {
+  type                     = "egress"
+  from_port                = 5003
+  to_port                  = 5003
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+  description              = "Allow outbound traffic to plugin installation service"
+
+  security_group_id = aws_security_group.dify_alb.id
+}
+
+resource "aws_security_group_rule" "dify_alb_egress_sandbox" {
+  type                     = "egress"
+  from_port                = 8194
+  to_port                  = 8194
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_sandbox.id
+  description              = "Allow outbound traffic to sandbox tasks"
+
+  security_group_id = aws_security_group.dify_alb.id
+}
+
 resource "aws_alb" "dify_alb" {
   name               = "alb-${local.base_name}-dify-001"
   internal           = false
@@ -139,6 +172,64 @@ resource "aws_lb_target_group" "dify_web" {
   )
 }
 
+resource "aws_lb_target_group" "dify_plugin_daemon" {
+  name        = "tg-${local.base_name}-dify-plugin"
+  port        = 5002
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 30
+    matcher             = "200"
+    path                = "/health/check"
+    timeout             = 20
+    unhealthy_threshold = 5
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "tg-${local.base_name}-dify-plugin-001"
+    }
+  )
+}
+
+resource "aws_lb_target_group" "dify_sandbox" {
+  name        = "tg-${local.base_name}-dify-sandbox"
+  port        = 8194
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "ip"
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 60
+    matcher             = "200"
+    path                = "/health"
+    timeout             = 10
+    unhealthy_threshold = 3
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "tg-${local.base_name}-dify-sandbox-001"
+    }
+  )
+}
+
 # HTTPで入力を受け付けて、Webタスクに転送するリスナーを作成
 resource "aws_lb_listener" "https" {
   load_balancer_arn = aws_alb.dify_alb.arn
@@ -152,7 +243,9 @@ resource "aws_lb_listener" "https" {
 
   depends_on = [
     aws_lb_target_group.dify_web,
-    aws_lb_target_group.dify_api
+    aws_lb_target_group.dify_api,
+    aws_lb_target_group.dify_plugin_daemon,
+    aws_lb_target_group.dify_sandbox,
   ]
 
   tags = merge(
@@ -165,16 +258,17 @@ resource "aws_lb_listener" "https" {
 
 # Use path base routing to forward requests to the api target group
 locals {
-  api_paths = ["/console/api", "/api", "/v1", "/files"]
+  api_paths_basic = ["/console/api", "/api", "/files"]
+  api_paths_v1 = ["/v1/apps", "/v1/workflows", "/v1/datasets", "/v1/chat-messages", "/v1/completion-messages"]
 }
 
-resource "aws_lb_listener_rule" "dify_api" {
+resource "aws_lb_listener_rule" "dify_api_basic" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 10
 
   condition {
     path_pattern {
-      values = local.api_paths
+      values = local.api_paths_basic
     }
   }
 
@@ -191,18 +285,18 @@ resource "aws_lb_listener_rule" "dify_api" {
   tags = merge(
     var.default_tags,
     {
-      Name = "dify-api-listener-rule-${local.base_name}-001"
+      Name = "dify-api-basic-listener-rule-${local.base_name}-001"
     }
   )
 }
 
-resource "aws_lb_listener_rule" "dify_api_routing" {
+resource "aws_lb_listener_rule" "dify_api_v1" {
   listener_arn = aws_lb_listener.https.arn
-  priority     = 11
+  priority     = 14
 
   condition {
     path_pattern {
-      values = [for path in local.api_paths : "${path}/*"]
+      values = local.api_paths_v1
     }
   }
 
@@ -219,7 +313,121 @@ resource "aws_lb_listener_rule" "dify_api_routing" {
   tags = merge(
     var.default_tags,
     {
-      Name = "dify-api-routing-listener-rule-${local.base_name}-001"
+      Name = "dify-api-v1-listener-rule-${local.base_name}-001"
+    }
+  )
+}
+
+resource "aws_lb_listener_rule" "dify_api_basic_routing" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 16
+
+  condition {
+    path_pattern {
+      values = [for path in local.api_paths_basic : "${path}/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dify_api.arn
+  }
+
+  depends_on = [
+    aws_lb_target_group.dify_api,
+    aws_lb_listener.https
+  ]
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "dify-api-basic-routing-listener-rule-${local.base_name}-001"
+    }
+  )
+}
+
+resource "aws_lb_listener_rule" "dify_api_v1_routing" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 17
+
+  condition {
+    path_pattern {
+      values = [for path in local.api_paths_v1 : "${path}/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dify_api.arn
+  }
+
+  depends_on = [
+    aws_lb_target_group.dify_api,
+    aws_lb_listener.https
+  ]
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "dify-api-v1-routing-listener-rule-${local.base_name}-001"
+    }
+  )
+}
+
+# Plugin daemon routing for /plugin path
+resource "aws_lb_listener_rule" "dify_plugin_daemon" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 30
+
+  condition {
+    path_pattern {
+      values = ["/plugin", "/plugin/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dify_plugin_daemon.arn
+  }
+
+  depends_on = [
+    aws_lb_target_group.dify_plugin_daemon,
+    aws_lb_listener.https
+  ]
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "dify-plugin-daemon-listener-rule-${local.base_name}-001"
+    }
+  )
+}
+
+# Sandbox routing for /sandbox and /v1/sandbox paths  
+resource "aws_lb_listener_rule" "dify_sandbox" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 18
+
+  condition {
+    path_pattern {
+      values = ["/sandbox", "/sandbox/*", "/v1/sandbox", "/v1/sandbox/*"]
+    }
+  }
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dify_sandbox.arn
+  }
+
+  depends_on = [
+    aws_lb_target_group.dify_sandbox,
+    aws_lb_listener.https
+  ]
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "dify-sandbox-listener-rule-${local.base_name}-001"
     }
   )
 }

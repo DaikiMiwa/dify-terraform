@@ -29,15 +29,6 @@ resource "aws_security_group_rule" "dify_worker_ingress_alb" {
 }
 
 # Worker egress rules
-resource "aws_security_group_rule" "dify_worker_egress_https" {
-  type              = "egress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  security_group_id = aws_security_group.dify_worker.id
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTPS to internet and VPC endpoints"
-}
 
 resource "aws_security_group_rule" "dify_worker_egress_aurora" {
   type                     = "egress"
@@ -61,17 +52,6 @@ resource "aws_security_group_rule" "dify_worker_egress_valkey" {
   security_group_id = aws_security_group.dify_worker.id
 }
 
-resource "aws_security_group_rule" "dify_worker_egress_http" {
-  type        = "egress"
-  from_port   = 80
-  to_port     = 80
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-  description = "Allow HTTP outbound traffic"
-
-  security_group_id = aws_security_group.dify_worker.id
-}
-
 resource "aws_security_group_rule" "dify_worker_egress_efs" {
   type                     = "egress"
   from_port                = 2049
@@ -83,6 +63,50 @@ resource "aws_security_group_rule" "dify_worker_egress_efs" {
   description = "Allow NFS traffic from ECS tasks to EFS"
 }
 
+# VPC Endpoints への HTTPS 通信を許可
+resource "aws_security_group_rule" "dify_worker_egress_vpc_endpoints" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTPS to VPC endpoints for CloudWatch Logs, ECR, Secrets Manager, Bedrock"
+}
+
+# VPC Endpoints への HTTP 通信を許可（ECR等で必要）
+resource "aws_security_group_rule" "dify_worker_egress_vpc_endpoints_http" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTP to VPC endpoints for ECR, S3"
+}
+
+# Allow Worker task to reach the internet-facing ALB over HTTP via NAT (for intra-service calls using ALB DNS)
+resource "aws_security_group_rule" "dify_worker_egress_http_internet" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow HTTP egress to ALB/public endpoints (required when using internet-facing ALB DNS)"
+}
+
+# S3 Gateway Endpoint access via prefix list
+resource "aws_security_group_rule" "dify_worker_egress_s3_prefix_list" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  prefix_list_ids   = ["pl-61a54008"]
+  description       = "Allow HTTPS to S3 via prefix list"
+}
+
 resource "aws_ecs_task_definition" "dify_worker" {
   family                   = "dify-worker"
   network_mode             = "awsvpc"
@@ -90,8 +114,8 @@ resource "aws_ecs_task_definition" "dify_worker" {
   execution_role_arn       = aws_iam_role.dify_task_execution_role.arn
   task_role_arn            = aws_iam_role.dify_api_task_role.arn
 
-  cpu    = 256
-  memory = 512
+  cpu    = 1024
+  memory = 2048
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -138,22 +162,21 @@ resource "aws_ecs_task_definition" "dify_worker" {
           SERVICE_API_URL = "http://${aws_alb.dify_alb.dns_name}"
           APP_API_URL     = "http://${aws_alb.dify_alb.dns_name}"
           APP_WEB_URL     = "http://${aws_alb.dify_alb.dns_name}"
-          FILES_URL       = "http://${aws_alb.dify_alb.dns_name}/files"
+          FILES_URL       = "http://${aws_alb.dify_alb.dns_name}"
 
           # PostgreSQL DB settings
           DB_HOST = aws_rds_cluster.aurora.endpoint
           DB_PORT = "5432"
 
-          # Redis settings
-          REDIS_HOST     = aws_elasticache_serverless_cache.this.endpoint[0].address
+          # Redis settings (for general use)
+          REDIS_HOST     = aws_elasticache_replication_group.this.primary_endpoint_address
           REDIS_PORT     = "6379"
           REDIS_DB       = 0
           REDIS_USE_SSL  = "true"
           REDIS_USERNAME = aws_elasticache_user.app_user.user_name
 
-          # Celery settings
+          # Celery settings (using shared ElastiCache with DB 1)
           CELERY_BACKEND = "redis"
-          BROKER_USE_SSL = "true"
 
           # Storage settings
           STORAGE_TYPE           = "s3"
@@ -170,10 +193,13 @@ resource "aws_ecs_task_definition" "dify_worker" {
           WEB_API_CORS_ALLOW_ORIGINS = "*"
           CONSOLE_CORS_ALLOW_ORIGINS = "*"
 
+          # code execution endpoint
+          CODE_EXECUTION_ENDPOINT = "http://${aws_alb.dify_alb.dns_name}"
+
           # PostgreSQL DB - non-secret values
-          DB_USERNAME = aws_rds_cluster.aurora.master_username
-          DB_DATABASE = aws_rds_cluster.aurora.database_name
-          PGSSLMODE = "verify-full"
+          DB_USERNAME   = aws_rds_cluster.aurora.master_username
+          DB_DATABASE   = aws_rds_cluster.aurora.database_name
+          PGSSLMODE     = "verify-full"
           PGSSLROOTCERT = "${local.ca_path_in_container}"
 
           # Vector Store(pgvector same as DB) - non-secret values
@@ -184,6 +210,15 @@ resource "aws_ecs_task_definition" "dify_worker" {
           # Storage
           S3_BUCKET_NAME = aws_s3_bucket.dify_data.bucket
 
+          # DEBUG
+          LOG_LEVEL              = "DEBUG"
+          DEBUG                  = "true"
+          ENABLE_REQUEST_LOGGING = "true"
+          SQLALCHEMY_ECHO        = "true"
+
+          # plugin daemon settings
+          PLUGIN_DAEMON_PORT = 80
+          PLUGIN_DAEMON_URL  = "http://${aws_alb.dify_alb.dns_name}"
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -193,7 +228,9 @@ resource "aws_ecs_task_definition" "dify_worker" {
 
           # PostgreSQL DB - secret values only
           DB_PASSWORD = aws_secretsmanager_secret.db_password.arn
-          SQLALCHEMY_DATABASE_URI = aws_secretsmanager_secret.sql_uri.arn
+
+          # SQL URI with SSL certificate
+          # SQLALCHEMY_DATABASE_URI = aws_secretsmanager_secret.sql_uri.arn
 
           # Redis Settings
           REDIS_PASSWORD = aws_secretsmanager_secret.valkey_password_secret.arn
@@ -204,6 +241,12 @@ resource "aws_ecs_task_definition" "dify_worker" {
 
           # Vector Store(pgvector same as DB) - secret values only
           PGVECTOR_PASSWORD = aws_secretsmanager_secret.db_password.arn
+
+          # code execution settings
+          CODE_EXECUTION_API_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
+
+          # PLUGIN daemon settings
+          PLUGIN_DAEMON_KEY = aws_secretsmanager_secret.dify_sandbox_api_key.arn
 
         } : { name = name, valueFrom = value }
       ]
@@ -220,6 +263,7 @@ resource "aws_ecs_task_definition" "dify_worker" {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "dify-worker"
+          "awslogs-create-group"  = "true"
         }
       }
     }

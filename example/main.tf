@@ -148,13 +148,13 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-# S3 VPC Endpoint
+# S3 VPC Endpoint - Conditional creation to avoid conflicts
 resource "aws_vpc_endpoint" "s3" {
+  count             = var.create_vpc_endpoints ? 1 : 0
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.region}.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = [aws_route_table.private.id, aws_route_table.public.id]
-  policy            = data.aws_iam_policy_document.s3_endpoint_policy.json
 
   tags = merge(
     local.default_tags,
@@ -164,15 +164,15 @@ resource "aws_vpc_endpoint" "s3" {
   )
 }
 
-# ECR VPC Endpoint
+# ECR VPC Endpoints - Conditional creation to avoid DNS conflicts
 resource "aws_vpc_endpoint" "ecr_dkr" {
+  count               = var.create_vpc_endpoints ? 1 : 0
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.region}.ecr.dkr"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
-  policy              = data.aws_iam_policy_document.ecr_endpoint_policy.json
 
   tags = merge(
     local.default_tags,
@@ -183,13 +183,13 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
 }
 
 resource "aws_vpc_endpoint" "ecr_api" {
+  count               = var.create_vpc_endpoints ? 1 : 0
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.region}.ecr.api"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
-  policy              = data.aws_iam_policy_document.ecr_endpoint_policy.json
 
   tags = merge(
     local.default_tags,
@@ -201,18 +201,90 @@ resource "aws_vpc_endpoint" "ecr_api" {
 
 # CloudWatch Logs VPC Endpoint
 resource "aws_vpc_endpoint" "logs" {
+  count               = var.create_vpc_endpoints ? 1 : 0
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.region}.logs"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
-  policy              = data.aws_iam_policy_document.logs_endpoint_policy.json
 
   tags = merge(
     local.default_tags,
     {
       Name = "vpce-${local.base_name}-logs-001"
+    }
+  )
+}
+
+# CloudWatch Monitoring VPC Endpoint
+resource "aws_vpc_endpoint" "monitoring" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.monitoring"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-monitoring-001"
+    }
+  )
+}
+
+# Bedrock VPC Endpoint
+resource "aws_vpc_endpoint" "bedrock" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.bedrock"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-bedrock-001"
+    }
+  )
+}
+
+# Bedrock Runtime VPC Endpoint
+resource "aws_vpc_endpoint" "bedrock_runtime" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.bedrock-runtime"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-bedrock-runtime-001"
+    }
+  )
+}
+
+# Secrets Manager VPC Endpoint
+resource "aws_vpc_endpoint" "secretsmanager" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-secretsmanager-001"
     }
   )
 }
@@ -227,7 +299,15 @@ resource "aws_security_group" "vpc_endpoint" {
     to_port     = 443
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr_block]
-    description = "Allow all traffic within VPC"
+    description = "Allow HTTPS traffic within VPC"
+  }
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+    description = "Allow HTTP traffic within VPC"
   }
 
   tags = merge(
@@ -238,71 +318,110 @@ resource "aws_security_group" "vpc_endpoint" {
   )
 }
 
+# Security Group for EC2 Instance Connect Endpoint
+resource "aws_security_group" "instance_connect_endpoint" {
+  name        = "${local.base_name}-ice-001"
+  description = "Security group for EC2 Instance Connect Endpoint"
+  vpc_id      = aws_vpc.main.id
+
+  # Allow SSH traffic from anywhere (Instance Connect will handle authentication)
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow SSH traffic through Instance Connect"
+  }
+
+  egress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr_block]
+    description = "Allow SSH traffic to EC2 instances in VPC"
+  }
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "sg-${local.base_name}-ice-001"
+    }
+  )
+}
+
 
 # Data sources
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
-data "aws_iam_policy_document" "s3_endpoint_policy" {
-  statement {
-    effect = "Allow"
 
-    principals {
-      type        = "*"
-      identifiers = ["*"]
+# SSM (Parameter Store) VPC Endpoint
+resource "aws_vpc_endpoint" "ssm" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
+
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-ssm-001"
     }
-
-    actions = [
-      "s3:GetObject",
-      "s3:PutObject",
-      "s3:DeleteObject",
-      "s3:ListBucket"
-    ]
-
-    resources = ["*"]
-  }
+  )
 }
 
-data "aws_iam_policy_document" "ecr_endpoint_policy" {
-  statement {
-    effect = "Allow"
+# SSMMessages VPC Endpoint (ECS Exec)
+resource "aws_vpc_endpoint" "ssmmessages" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
 
-    principals {
-      type        = "*"
-      identifiers = ["*"]
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-ssmmessages-001"
     }
-
-    actions = [
-      "ecr:GetAuthorizationToken",
-      "ecr:BatchCheckLayerAvailability",
-      "ecr:GetDownloadUrlForLayer",
-      "ecr:BatchGetImage"
-    ]
-
-    resources = ["*"]
-  }
+  )
 }
 
-data "aws_iam_policy_document" "logs_endpoint_policy" {
-  statement {
-    effect = "Allow"
+# EC2Messages VPC Endpoint (ECS Exec)
+resource "aws_vpc_endpoint" "ec2messages" {
+  count               = var.create_vpc_endpoints ? 1 : 0
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpc_endpoint.id]
+  private_dns_enabled = true
 
-    principals {
-      type        = "*"
-      identifiers = ["*"]
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "vpce-${local.base_name}-ec2messages-001"
     }
+  )
+}
 
-    actions = [
-      "logs:CreateLogGroup",
-      "logs:CreateLogStream",
-      "logs:PutLogEvents",
-      "logs:DescribeLogGroups",
-      "logs:DescribeLogStreams"
-    ]
+# EC2 Instance Connect Endpoint
+resource "aws_ec2_instance_connect_endpoint" "main" {
+  count              = var.create_vpc_endpoints ? 1 : 0
+  subnet_id          = aws_subnet.private[0].id
+  security_group_ids = [aws_security_group.instance_connect_endpoint.id]
 
-    resources = ["*"]
-  }
+  tags = merge(
+    local.default_tags,
+    {
+      Name = "ice-${local.base_name}-001"
+    }
+  )
 }
 
 # Call the Dify module
@@ -314,6 +433,10 @@ module "dify" {
   vpc_cidr_block     = aws_vpc.main.cidr_block
   private_subnet_ids = aws_subnet.private[*].id
   public_subnet_ids  = aws_subnet.public[*].id
+  route_table_ids    = [aws_route_table.private.id, aws_route_table.public.id]
+
+  # Disable VPC endpoints in the dify module since they're created here
+  enable_vpc_endpoints = false
 
   default_tags = local.default_tags
 

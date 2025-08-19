@@ -21,3 +21,9 @@ variable "private_subnet_cidrs" {
   type        = list(string)
   default     = ["10.0.10.0/24", "10.0.11.0/24"]
 }
+
+variable "create_vpc_endpoints" {
+  description = "Whether to create VPC endpoints. Set to false if VPC endpoints already exist to avoid conflicts."
+  type        = bool
+  default     = false
+}

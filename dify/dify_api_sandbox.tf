@@ -1,6 +1,6 @@
-# ----------------------------------------------------------- #
-# This file defines the ECS service for Dify API and Sandbox. #
-# ----------------------------------------------------------- #
+# ------------------------------------------------- #
+# This file defines the ECS service for Dify API. #
+# ------------------------------------------------- #
 locals {
   ca_path_in_container = "${var.container_cert_mount_path}/${var.efs_ca_filename}"
   # Aurora master password will be retrieved dynamically
@@ -33,15 +33,6 @@ resource "aws_security_group_rule" "dify_api_ingress_alb" {
 }
 
 # API egress rules
-resource "aws_security_group_rule" "dify_api_egress_https" {
-  type              = "egress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  security_group_id = aws_security_group.dify_api.id
-  cidr_blocks       = ["0.0.0.0/0"]
-  description       = "HTTPS to internet and VPC endpoints"
-}
 
 resource "aws_security_group_rule" "dify_api_egress_aurora" {
   type                     = "egress"
@@ -64,17 +55,6 @@ resource "aws_security_group_rule" "dify_api_egress_valkey" {
 
   security_group_id = aws_security_group.dify_api.id
 }
-resource "aws_security_group_rule" "dify_api_egress_http" {
-  type        = "egress"
-  from_port   = 80
-  to_port     = 80
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-  description = "Allow HTTP outbound traffic"
-
-  security_group_id = aws_security_group.dify_api.id
-}
-
 resource "aws_security_group_rule" "dify_api_egress_efs" {
   type                     = "egress"
   from_port                = 2049
@@ -84,6 +64,61 @@ resource "aws_security_group_rule" "dify_api_egress_efs" {
   source_security_group_id = aws_security_group.efs.id
 
   description = "Allow NFS traffic from ECS tasks to EFS"
+}
+
+resource "aws_security_group_rule" "dify_api_egress_plugin_daemon" {
+  type                     = "egress"
+  from_port                = 5002
+  to_port                  = 5002
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+  description              = "Allow outbound traffic to plugin daemon"
+
+  security_group_id = aws_security_group.dify_api.id
+}
+
+# VPC Endpoints への HTTPS 通信を許可
+resource "aws_security_group_rule" "dify_api_egress_vpc_endpoints" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_api.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTPS to VPC endpoints for CloudWatch Logs, ECR, Secrets Manager, Bedrock"
+}
+
+# VPC Endpoints への HTTP 通信を許可（ECR等で必要）
+resource "aws_security_group_rule" "dify_api_egress_vpc_endpoints_http" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_api.id
+  cidr_blocks       = [var.vpc_cidr_block]
+  description       = "Allow HTTP to VPC endpoints for ECR, S3"
+}
+
+# Allow API task to reach the internet-facing ALB over HTTP via NAT (for intra-service calls using ALB DNS)
+resource "aws_security_group_rule" "dify_api_egress_http_internet" {
+  type              = "egress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_api.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow HTTP egress to ALB/public endpoints (required when using internet-facing ALB DNS)"
+}
+
+# S3 Gateway Endpoint access via prefix list
+resource "aws_security_group_rule" "dify_api_egress_s3_prefix_list" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_api.id
+  prefix_list_ids   = ["pl-61a54008"]
+  description       = "Allow HTTPS to S3 via prefix list"
 }
 
 resource "random_password" "dify_secret_key" {
@@ -199,7 +234,7 @@ resource "aws_ecs_task_definition" "dify_api" {
       # use private ECR defined above
       # The image is defined in the ECR repository created above
       image     = "${aws_ecr_repository.dify_api.repository_url}:latest"
-      essential = false
+      essential = true
 
 
       portMappings = [
@@ -219,22 +254,24 @@ resource "aws_ecs_task_definition" "dify_api" {
           SERVICE_API_URL = "http://${aws_alb.dify_alb.dns_name}"
           APP_API_URL     = "http://${aws_alb.dify_alb.dns_name}"
           APP_WEB_URL     = "http://${aws_alb.dify_alb.dns_name}"
-          FILES_URL       = "http://${aws_alb.dify_alb.dns_name}/files"
+          FILES_URL       = "http://${aws_alb.dify_alb.dns_name}"
 
           # PostgreSQL DB settings
           DB_HOST = aws_rds_cluster.aurora.endpoint
           DB_PORT = "5432"
 
-          # Redis settings
-          REDIS_HOST     = aws_elasticache_serverless_cache.this.endpoint[0].address
+          # Redis settings (for general use)
+          REDIS_HOST     = aws_elasticache_replication_group.this.primary_endpoint_address
           REDIS_PORT     = "6379"
           REDIS_DB       = 0
           REDIS_USE_SSL  = "true"
           REDIS_USERNAME = aws_elasticache_user.app_user.user_name
 
-          # Celery settings
+          # Celery settings (using shared ElastiCache with DB 1)
           CELERY_BACKEND = "redis"
-          BROKER_USE_SSL = "true"
+
+          # Debug settings
+          LOG_LEVEL = "DEBUG"
 
           # Storage settings
           STORAGE_TYPE           = "s3"
@@ -252,7 +289,7 @@ resource "aws_ecs_task_definition" "dify_api" {
           CONSOLE_CORS_ALLOW_ORIGINS = "*"
 
           # code execution endpoint
-          CODE_EXECUTION_ENDPOINT = "http://localhost:8194"
+          CODE_EXECUTION_ENDPOINT = "http://${aws_alb.dify_alb.dns_name}"
 
           # PostgreSQL DB - non-secret values
           DB_USERNAME   = aws_rds_cluster.aurora.master_username
@@ -271,9 +308,14 @@ resource "aws_ecs_task_definition" "dify_api" {
           # migration settings
           MIGRATION_ENABLED = "true"
 
+          # DEBUG
+          DEBUG                  = "true"
+          ENABLE_REQUEST_LOGGING = "true"
+          SQLALCHEMY_ECHO        = "false"
+
           # plugin daemon settings
-          PLUGIN_DAEMON_PORT = 5002
-          PLUGIN_DAEMON_URL  = "http://localhost:5002"
+          PLUGIN_DAEMON_PORT = 80
+          PLUGIN_DAEMON_URL  = "http://${aws_alb.dify_alb.dns_name}"
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -283,9 +325,6 @@ resource "aws_ecs_task_definition" "dify_api" {
 
           # PostgreSQL DB - secret values only
           DB_PASSWORD = aws_secretsmanager_secret.db_password.arn
-
-          # SQL URI with SSL certificate
-          # SQLALCHEMY_DATABASE_URI = aws_secretsmanager_secret.sql_uri.arn
 
           # Redis Settings
           REDIS_PASSWORD = aws_secretsmanager_secret.valkey_password_secret.arn
@@ -318,6 +357,7 @@ resource "aws_ecs_task_definition" "dify_api" {
           "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
           "awslogs-region"        = var.region
           "awslogs-stream-prefix" = "dify-api"
+          "awslogs-create-group"  = "true"
         }
       }
       healthCheck = {
@@ -327,140 +367,6 @@ resource "aws_ecs_task_definition" "dify_api" {
         retries     = 5
         startPeriod = 120
       }
-      cpu = 0
-    },
-    {
-      name      = "dify-sandbox"
-      image     = "${aws_ecr_repository.dify_sandbox.repository_url}:latest"
-      essential = false
-
-      portMappings = [
-        {
-          hostPort      = 8194
-          protocol      = "tcp"
-          containerPort = 8194
-        }
-      ]
-
-      environment = [
-        for name, value in {
-          GINE_MODE      = "release"
-          WORKER_TIMEOUT = 15
-          ENABLE_NETWORK = true
-          SANDBOX_PORT   = 8194
-        } : { name = name, value = tostring(value) }
-      ]
-      secrets = [
-        {
-          name      = "API_KEY"
-          valueFrom = aws_secretsmanager_secret.dify_sandbox_api_key.arn
-        }
-      ]
-
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "dify-sandbox"
-        }
-      }
-      healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:8194/health || exit 1"]
-        interval    = 60
-        timeout     = 10
-        retries     = 3
-        startPeriod = 60
-      }
-      cpu = 0
-    },
-    {
-      name      = "dify-plugin-daemon"
-      image     = "${aws_ecr_repository.dify_plugin_daemon.repository_url}:latest"
-      essential = true
-
-      portMappings = [
-        {
-          hostPort      = 5002
-          containerPort = 5002
-          protocol      = "tcp"
-        },
-        {
-          hostPort      = 5003
-          containerPort = 5003
-          protocol      = "tcp"
-        }
-      ]
-
-      environment = [
-        for name, value in {
-          # Plugin daemon settings
-          SERVER_PORT        = 5002
-          GIN_MODE           = "release"
-          DIFY_INNER_API_URL = "http://localhost:5001"
-
-          # PostgreSQL DB settings
-          DB_HOST        = aws_rds_cluster.aurora.endpoint
-          DB_PORT        = "5432"
-          DB_USERNAME    = aws_rds_cluster.aurora.master_username
-          DB_DATABASE    = aws_rds_cluster.aurora.database_name
-          DB_SSL_MODE    = "require"
-          SSLMODE        = "verify-full"
-          DB_SSLROOTCERT = local.ca_path_in_container
-
-          # Storage settings
-          STORAGE_TYPE           = "s3"
-          S3_ENDPOINT            = "https://s3.amazonaws.com"
-          S3_BUCKET              = aws_s3_bucket.dify_data.bucket
-          AWS_REGION             = var.region
-          S3_USE_AWS_MANAGED_IAM = "true"
-
-          PLUGIN_REMOTE_INSTALLING_HOST = "0.0.0.0" # もしくは実ホスト名/FQDN
-          PLUGIN_REMOTE_INSTALLING_PORT = 5003
-          PLUGIN_WORKING_PATH           = "/app/storage/cwd"
-
-          # Redis settings
-          REDIS_HOST     = aws_elasticache_serverless_cache.this.endpoint[0].address
-          REDIS_PORT     = "6379"
-          REDIS_DB       = 0
-          REDIS_USE_SSL  = "true"
-          REDIS_USERNAME = aws_elasticache_user.app_user.user_name
-
-        } : { name = name, value = tostring(value) }
-      ]
-      secrets = [
-        {
-          name      = "SERVER_KEY"
-          valueFrom = aws_secretsmanager_secret.dify_sandbox_api_key.arn
-        },
-        {
-          name      = "DIFY_INNER_API_KEY"
-          valueFrom = aws_secretsmanager_secret.dify_secret_key.arn
-        },
-        {
-          name      = "DB_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.db_password.arn
-        },
-        {
-          name      = "REDIS_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.valkey_password_secret.arn
-        }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs.name
-          "awslogs-region"        = var.region
-          "awslogs-stream-prefix" = "dify-sandbox"
-        }
-      }
-      mountPoints = [
-        {
-          sourceVolume  = "efs-certs",
-          containerPath = var.container_cert_mount_path,
-          readOnly      = true
-        }
-      ]
       cpu = 0
     }
   ])
@@ -475,7 +381,7 @@ resource "aws_ecs_task_definition" "dify_api" {
 
 # ECS Service
 resource "aws_ecs_service" "dify_api" {
-  depends_on             = [aws_lb_listener_rule.dify_api]
+  depends_on             = [aws_lb_listener_rule.dify_api_basic, aws_lb_listener_rule.dify_api_v1]
   name                   = "dify-api"
   cluster                = aws_ecs_cluster.dify.name
   desired_count          = 1

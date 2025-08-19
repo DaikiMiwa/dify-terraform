@@ -32,6 +32,41 @@ resource "aws_security_group_rule" "efs_ingress_from_dify_worker" {
   description = "Allow NFS traffic from ECS tasks to EFS"
 }
 
+resource "aws_security_group_rule" "efs_ingress_from_plugin_daemon" {
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.efs.id
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+
+  description = "Allow NFS traffic from Plugin Daemon tasks to EFS"
+}
+
+# Security Group for EFS Plugins
+resource "aws_security_group" "efs_plugins" {
+  description = "Allow NFS from Plugin Daemon tasks"
+  vpc_id      = var.vpc_id
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "${local.base_name}-sg-efs-plugins"
+    }
+  )
+}
+
+resource "aws_security_group_rule" "efs_plugins_ingress_from_plugin_daemon" {
+  type                     = "ingress"
+  from_port                = 2049
+  to_port                  = 2049
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.efs_plugins.id
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+
+  description = "Allow NFS traffic from Plugin Daemon tasks to EFS"
+}
+
 
 resource "aws_efs_file_system" "this" {
   creation_token = "${local.base_name}-efs"
@@ -81,4 +116,55 @@ resource "aws_efs_mount_target" "mt" {
   file_system_id  = aws_efs_file_system.this.id
   subnet_id       = var.private_subnet_ids[count.index]
   security_groups = [aws_security_group.efs.id]
+}
+
+# EFS File System for Plugin Daemon data persistence
+resource "aws_efs_file_system" "plugins" {
+  creation_token = "${local.base_name}-efs-plugins"
+  encrypted      = true
+
+  lifecycle_policy {
+    transition_to_ia = "AFTER_30_DAYS"
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "efs-${local.base_name}-plugins-001"
+    }
+  )
+}
+
+# /plugins を強制するアクセスポイント（uid/gid は任意。Plugin Daemon から RW マウント）
+resource "aws_efs_access_point" "plugins" {
+  file_system_id = aws_efs_file_system.plugins.id
+
+  posix_user {
+    uid = 1000
+    gid = 1000
+  }
+
+  root_directory {
+    path = "/plugins"
+    creation_info {
+      owner_uid   = 1000
+      owner_gid   = 1000
+      permissions = "0755"
+    }
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "efs-access-point-${local.base_name}-plugins-001"
+    }
+  )
+}
+
+# 各サブネットに Mount Target for Plugins
+resource "aws_efs_mount_target" "plugins_mt" {
+  count           = length(var.private_subnet_ids)
+  file_system_id  = aws_efs_file_system.plugins.id
+  subnet_id       = var.private_subnet_ids[count.index]
+  security_groups = [aws_security_group.efs_plugins.id]
 }
