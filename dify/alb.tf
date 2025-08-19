@@ -2,6 +2,7 @@
 # Settings for Application Load balancer for ecs
 # ------------------------------------------------
 resource "aws_security_group" "dify_alb" {
+  name        = "${local.base_name}-alb-001-sg"
   description = "Security group for Dify ALB"
   vpc_id      = var.vpc_id
 
@@ -10,7 +11,7 @@ resource "aws_security_group" "dify_alb" {
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-alb"
+      Name = "sg-${local.base_name}-alb-001"
     }
   )
 }

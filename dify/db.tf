@@ -2,6 +2,7 @@
 # Setting for aurora serverless cluster
 # -------------------------------------
 resource "aws_security_group" "aurora" {
+  name        = "${local.base_name}-aurora-001-sg"
   description = "Security group for Aurora Serverless cluster"
   vpc_id      = var.vpc_id
 
@@ -10,7 +11,7 @@ resource "aws_security_group" "aurora" {
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-aurora"
+      Name = "sg-${local.base_name}-aurora-001"
     }
   )
 }
@@ -57,12 +58,6 @@ resource "aws_rds_cluster_parameter_group" "aurora" {
     value = "1"
   }
 
-  # Enable pgvector extension
-  parameter {
-    name  = "shared_preload_libraries"
-    value = "vector"
-  }
-
   tags = merge(
     var.default_tags,
     {
@@ -93,9 +88,9 @@ resource "aws_rds_cluster" "aurora" {
   master_username             = "dbadmin"
   manage_master_user_password = true
 
-  storage_encrypted = true
+  storage_encrypted      = true
   vpc_security_group_ids = [aws_security_group.aurora.id]
-  
+
   enable_http_endpoint = true
 
 
