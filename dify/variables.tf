@@ -85,3 +85,9 @@ variable "enable_vpc_endpoints" {
   default     = false
 }
 
+variable "alb_ingress_cidr_blocks" {
+  description = "CIDR blocks allowed to access the ALB. Use ['0.0.0.0/0'] for public access or VPC CIDR for internal access only."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
