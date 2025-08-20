@@ -119,13 +119,3 @@ terraform init
 terraform plan
 terraform apply
 ```
-
-## 残TODO
-
-- valkeyのssl化
-  - parameter groupの設定
-  - 証明書の設置 -> しなくてよいらしい
-- dify plugin daemonの別タスク化
-- dify plugin daemonのキャッシュ維持
-  - efsを使用？
-
