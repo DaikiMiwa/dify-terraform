@@ -174,6 +174,11 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -190,6 +195,11 @@ resource "aws_vpc_endpoint" "ecr_api" {
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
+
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
 
   tags = merge(
     local.default_tags,
@@ -209,6 +219,11 @@ resource "aws_vpc_endpoint" "logs" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -226,6 +241,11 @@ resource "aws_vpc_endpoint" "monitoring" {
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
+
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
 
   tags = merge(
     local.default_tags,
@@ -245,6 +265,11 @@ resource "aws_vpc_endpoint" "bedrock" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -263,6 +288,11 @@ resource "aws_vpc_endpoint" "bedrock_runtime" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -280,6 +310,11 @@ resource "aws_vpc_endpoint" "secretsmanager" {
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
+
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
 
   tags = merge(
     local.default_tags,
@@ -366,6 +401,11 @@ resource "aws_vpc_endpoint" "ssm" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -383,6 +423,11 @@ resource "aws_vpc_endpoint" "ssmmessages" {
   subnet_ids          = aws_subnet.private[*].id
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
+
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
 
   tags = merge(
     local.default_tags,
@@ -402,6 +447,11 @@ resource "aws_vpc_endpoint" "ec2messages" {
   security_group_ids  = [aws_security_group.vpc_endpoint.id]
   private_dns_enabled = true
 
+  depends_on = [
+    aws_security_group.vpc_endpoint,
+    aws_subnet.private
+  ]
+
   tags = merge(
     local.default_tags,
     {
@@ -415,6 +465,11 @@ resource "aws_ec2_instance_connect_endpoint" "main" {
   count              = var.create_vpc_endpoints ? 1 : 0
   subnet_id          = aws_subnet.private[0].id
   security_group_ids = [aws_security_group.instance_connect_endpoint.id]
+
+  depends_on = [
+    aws_security_group.instance_connect_endpoint,
+    aws_subnet.private
+  ]
 
   tags = merge(
     local.default_tags,
@@ -441,4 +496,13 @@ module "dify" {
   default_tags = local.default_tags
 
   base_name = local.base_name
+
+  depends_on = [
+    aws_vpc.main,
+    aws_subnet.private,
+    aws_subnet.public,
+    aws_route_table.private,
+    aws_route_table.public,
+    aws_nat_gateway.main
+  ]
 }

@@ -3,6 +3,7 @@
 # ----------------------------------------------------------- #
 
 resource "aws_security_group" "dify_worker" {
+  name        = "${local.base_name}-worker-001-sg"
   description = "Security group for Dify Worker task"
   vpc_id      = var.vpc_id
 
@@ -11,7 +12,7 @@ resource "aws_security_group" "dify_worker" {
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-worker"
+      Name = "sg-${local.base_name}-worker-001"
     }
   )
 }
@@ -105,6 +106,18 @@ resource "aws_security_group_rule" "dify_worker_egress_s3_prefix_list" {
   security_group_id = aws_security_group.dify_worker.id
   prefix_list_ids   = ["pl-61a54008"]
   description       = "Allow HTTPS to S3 via prefix list"
+}
+
+# HTTPS egress to internet when VPC endpoints are disabled
+resource "aws_security_group_rule" "dify_worker_egress_https_internet" {
+  count             = var.enable_vpc_endpoints ? 0 : 1
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  security_group_id = aws_security_group.dify_worker.id
+  cidr_blocks       = ["0.0.0.0/0"]
+  description       = "Allow HTTPS egress to internet when VPC endpoints are disabled"
 }
 
 resource "aws_ecs_task_definition" "dify_worker" {
@@ -283,5 +296,11 @@ resource "aws_ecs_service" "dify_worker" {
     security_groups  = [aws_security_group.dify_worker.id]
     assign_public_ip = false
   }
+
+  depends_on = [
+    aws_ecs_task_definition.dify_worker,
+    aws_security_group.dify_worker,
+    aws_ecs_cluster.dify
+  ]
 }
 

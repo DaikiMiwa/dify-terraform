@@ -1,11 +1,12 @@
 resource "aws_security_group" "efs" {
+  name        = "${local.base_name}-efs-001-sg"
   description = "Allow NFS from ECS tasks"
   vpc_id      = var.vpc_id
 
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-efs"
+      Name = "sg-${local.base_name}-efs-001"
     }
   )
 }
@@ -45,13 +46,14 @@ resource "aws_security_group_rule" "efs_ingress_from_plugin_daemon" {
 
 # Security Group for EFS Plugins
 resource "aws_security_group" "efs_plugins" {
+  name        = "${local.base_name}-efs-plugins-001-sg"
   description = "Allow NFS from Plugin Daemon tasks"
   vpc_id      = var.vpc_id
 
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-efs-plugins"
+      Name = "sg-${local.base_name}-efs-plugins-001"
     }
   )
 }

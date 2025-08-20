@@ -2,6 +2,7 @@
 # Settings for ElastiCache for Valkey
 # ------------------------------------------------
 resource "aws_security_group" "valkey" {
+  name        = "${local.base_name}-valkey-001-sg"
   description = "Security group for Valkey cluster with SSL enforcement"
   vpc_id      = var.vpc_id
 
@@ -10,7 +11,7 @@ resource "aws_security_group" "valkey" {
   tags = merge(
     var.default_tags,
     {
-      Name = "${local.base_name}-sg-valkey"
+      Name = "sg-${local.base_name}-valkey-001"
     }
   )
 }
@@ -25,6 +26,11 @@ resource "aws_security_group_rule" "valkey_ingress_6379_api" {
   description              = "Allow inbound traffic from private subnets"
 
   security_group_id = aws_security_group.valkey.id
+
+  depends_on = [
+    aws_security_group.valkey,
+    aws_security_group.dify_api
+  ]
 }
 
 resource "aws_security_group_rule" "valkey_ingress_6379_worker" {
@@ -36,6 +42,11 @@ resource "aws_security_group_rule" "valkey_ingress_6379_worker" {
   description              = "Allow inbound traffic from private subnets"
 
   security_group_id = aws_security_group.valkey.id
+
+  depends_on = [
+    aws_security_group.valkey,
+    aws_security_group.dify_worker
+  ]
 }
 
 resource "aws_security_group_rule" "valkey_ingress_6379_plugin_daemon" {
@@ -49,39 +60,6 @@ resource "aws_security_group_rule" "valkey_ingress_6379_plugin_daemon" {
   security_group_id = aws_security_group.valkey.id
 }
 
-# Valkey ingress rules for port 6380
-resource "aws_security_group_rule" "valkey_ingress_6380_api" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_api.id
-  description              = "Allow inbound traffic from ECS tasks"
-
-  security_group_id = aws_security_group.valkey.id
-}
-
-resource "aws_security_group_rule" "valkey_ingress_6380_worker" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_worker.id
-  description              = "Allow inbound traffic from ECS tasks"
-
-  security_group_id = aws_security_group.valkey.id
-}
-
-resource "aws_security_group_rule" "valkey_ingress_6380_plugin_daemon" {
-  type                     = "ingress"
-  from_port                = 6380
-  to_port                  = 6380
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_plugin_daemon.id
-  description              = "Allow inbound traffic from plugin daemon"
-
-  security_group_id = aws_security_group.valkey.id
-}
 
 # settings for valkey user for dify
 resource "random_password" "valkey_password" {
@@ -208,12 +186,21 @@ resource "aws_elasticache_replication_group" "this" {
   security_group_ids = [aws_security_group.valkey.id]
 
   # Auth settings
-  user_group_ids             = [aws_elasticache_user_group.app_user_group.id]
+  user_group_ids = [aws_elasticache_user_group.app_user_group.id]
+
   transit_encryption_enabled = true
   at_rest_encryption_enabled = true
+  transit_encryption_mode    = "required"
 
   # Maintenance
   auto_minor_version_upgrade = true
+
+  depends_on = [
+    aws_elasticache_subnet_group.this,
+    aws_security_group.valkey,
+    aws_elasticache_parameter_group.valkey_ssl,
+    aws_elasticache_user_group.app_user_group
+  ]
 
   tags = merge(
     var.default_tags,
