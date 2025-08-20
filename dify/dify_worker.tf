@@ -296,5 +296,11 @@ resource "aws_ecs_service" "dify_worker" {
     security_groups  = [aws_security_group.dify_worker.id]
     assign_public_ip = false
   }
+
+  depends_on = [
+    aws_ecs_task_definition.dify_worker,
+    aws_security_group.dify_worker,
+    aws_ecs_cluster.dify
+  ]
 }
 

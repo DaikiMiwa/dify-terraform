@@ -179,4 +179,11 @@ resource "aws_ecs_service" "dify_web" {
     container_name   = "dify-web"
     container_port   = 3000
   }
+
+  depends_on = [
+    aws_ecs_task_definition.dify_web,
+    aws_lb_target_group.dify_web,
+    aws_security_group.dify_web,
+    aws_ecs_cluster.dify
+  ]
 }

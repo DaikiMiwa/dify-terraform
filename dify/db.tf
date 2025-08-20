@@ -25,6 +25,11 @@ resource "aws_security_group_rule" "aurora_ingress_api" {
   source_security_group_id = aws_security_group.dify_api.id
 
   security_group_id = aws_security_group.aurora.id
+
+  depends_on = [
+    aws_security_group.aurora,
+    aws_security_group.dify_api
+  ]
 }
 
 resource "aws_security_group_rule" "aurora_ingress_worker" {
@@ -35,6 +40,11 @@ resource "aws_security_group_rule" "aurora_ingress_worker" {
   source_security_group_id = aws_security_group.dify_worker.id
 
   security_group_id = aws_security_group.aurora.id
+
+  depends_on = [
+    aws_security_group.aurora,
+    aws_security_group.dify_worker
+  ]
 }
 
 resource "aws_security_group_rule" "aurora_ingress_plugin_daemon" {
@@ -104,6 +114,12 @@ resource "aws_rds_cluster" "aurora" {
     seconds_until_auto_pause = var.aws_rds_cluster_scaling_configuration.seconds_until_auto_pause
   }
 
+  depends_on = [
+    aws_db_subnet_group.aurora,
+    aws_security_group.aurora,
+    aws_rds_cluster_parameter_group.aurora
+  ]
+
   tags = merge(
     var.default_tags,
     {
@@ -120,6 +136,10 @@ resource "aws_rds_cluster_instance" "aurora_instance" {
   engine_version     = aws_rds_cluster.aurora.engine_version
 
   performance_insights_enabled = true
+
+  depends_on = [
+    aws_rds_cluster.aurora
+  ]
 
   tags = merge(
     var.default_tags,

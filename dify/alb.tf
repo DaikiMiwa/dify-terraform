@@ -107,6 +107,10 @@ resource "aws_alb" "dify_alb" {
 
   enable_deletion_protection = false
 
+  depends_on = [
+    aws_security_group.dify_alb
+  ]
+
   tags = merge(
     var.default_tags,
     {

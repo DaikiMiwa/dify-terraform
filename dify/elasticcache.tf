@@ -26,6 +26,11 @@ resource "aws_security_group_rule" "valkey_ingress_6379_api" {
   description              = "Allow inbound traffic from private subnets"
 
   security_group_id = aws_security_group.valkey.id
+
+  depends_on = [
+    aws_security_group.valkey,
+    aws_security_group.dify_api
+  ]
 }
 
 resource "aws_security_group_rule" "valkey_ingress_6379_worker" {
@@ -37,6 +42,11 @@ resource "aws_security_group_rule" "valkey_ingress_6379_worker" {
   description              = "Allow inbound traffic from private subnets"
 
   security_group_id = aws_security_group.valkey.id
+
+  depends_on = [
+    aws_security_group.valkey,
+    aws_security_group.dify_worker
+  ]
 }
 
 resource "aws_security_group_rule" "valkey_ingress_6379_plugin_daemon" {
@@ -184,6 +194,13 @@ resource "aws_elasticache_replication_group" "this" {
 
   # Maintenance
   auto_minor_version_upgrade = true
+
+  depends_on = [
+    aws_elasticache_subnet_group.this,
+    aws_security_group.valkey,
+    aws_elasticache_parameter_group.valkey_ssl,
+    aws_elasticache_user_group.app_user_group
+  ]
 
   tags = merge(
     var.default_tags,

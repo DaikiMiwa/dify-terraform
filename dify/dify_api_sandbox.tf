@@ -31,6 +31,11 @@ resource "aws_security_group_rule" "dify_api_ingress_alb" {
   description              = "Allow inbound traffic from ALB"
 
   security_group_id = aws_security_group.dify_api.id
+
+  depends_on = [
+    aws_security_group.dify_api,
+    aws_security_group.dify_alb
+  ]
 }
 
 # API egress rules
