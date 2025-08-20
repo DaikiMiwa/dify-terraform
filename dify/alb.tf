@@ -7,7 +7,6 @@ resource "aws_security_group" "dify_alb" {
   vpc_id      = var.vpc_id
 
   # ルールはここに書かない（ingress/egress ブロックを空にしておく）
-
   tags = merge(
     var.default_tags,
     {
@@ -22,8 +21,8 @@ resource "aws_security_group_rule" "dify_alb_ingress_80" {
   from_port   = 80
   to_port     = 80
   protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-  description = "Allow inbound traffic on port 80 from VPC CIDR block"
+  cidr_blocks = var.alb_ingress_cidr_blocks
+  description = "Allow inbound traffic on port 80"
 
   security_group_id = aws_security_group.dify_alb.id
 }
@@ -33,8 +32,8 @@ resource "aws_security_group_rule" "dify_alb_ingress_443" {
   from_port   = 443
   to_port     = 443
   protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-  description = "Allow inbound traffic on port 443 from VPC CIDR block"
+  cidr_blocks = var.alb_ingress_cidr_blocks
+  description = "Allow inbound traffic on port 443"
 
   security_group_id = aws_security_group.dify_alb.id
 }
@@ -264,7 +263,7 @@ resource "aws_lb_listener" "https" {
 # Use path base routing to forward requests to the api target group
 locals {
   api_paths_basic = ["/console/api", "/api", "/files"]
-  api_paths_v1 = ["/v1/apps", "/v1/workflows", "/v1/datasets", "/v1/chat-messages", "/v1/completion-messages"]
+  api_paths_v1    = ["/v1/apps", "/v1/workflows", "/v1/datasets", "/v1/chat-messages", "/v1/completion-messages"]
 }
 
 resource "aws_lb_listener_rule" "dify_api_basic" {
