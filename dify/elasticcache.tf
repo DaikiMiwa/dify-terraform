@@ -169,7 +169,7 @@ resource "aws_elasticache_subnet_group" "this" {
 # ElastiCache Replication Group for Valkey
 resource "aws_elasticache_replication_group" "this" {
   description          = "ElastiCache for Valkey - Shared by Dify and Celery"
-  replication_group_id = "${local.base_name}-valkey"
+  replication_group_id = substr("${local.base_name}-valkey", 0, 50)
 
   engine         = "valkey"
   engine_version = "8.0"
