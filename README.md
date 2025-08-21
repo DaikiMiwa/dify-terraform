@@ -29,7 +29,7 @@ langgenius/dify-plugin-daemon:0.0.2
 効率化のため、以下の環境変数を事前に設定してください：
 
 ```bash
-export AWS_ACCOUNT_ID=123456789012  # 実際のAWSアカウントIDに置き換え
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 export AWS_REGION=ap-northeast-1
 export BASE_NAME=dify-test-001      # 使用するbase_nameに置き換え
 ```
