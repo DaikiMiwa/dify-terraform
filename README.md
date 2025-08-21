@@ -16,15 +16,27 @@ langgenius/dify-web:1.7.2
 
 # Dify Sandbox用
 langgenius/dify-sandbox:0.2.12
+
+# Dify Plugin Daemon用
+langgenius/dify-plugin-daemon:0.0.2
 ```
 
 #### プッシュ手順
 
 **注意**: このTerraformモジュールではFargateのARM64アーキテクチャを使用しているため、イメージをプルする際は `--platform linux/arm64` を指定する必要があります。
 
+**環境変数の設定**
+効率化のため、以下の環境変数を事前に設定してください：
+
+```bash
+export AWS_ACCOUNT_ID=123456789012  # 実際のAWSアカウントIDに置き換え
+export AWS_REGION=ap-northeast-1
+export BASE_NAME=dify-test-001      # 使用するbase_nameに置き換え
+```
+
 1. **ECRにログイン**
 ```bash
-aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com
+aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 ```
 
 2. **パブリックイメージをプル**
@@ -33,25 +45,30 @@ aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS
 docker pull --platform linux/arm64 langgenius/dify-api:1.7.2
 docker pull --platform linux/arm64 langgenius/dify-web:1.7.2  
 docker pull --platform linux/arm64 langgenius/dify-sandbox:0.2.12
+docker pull --platform linux/arm64 langgenius/dify-plugin-daemon:0.0.2
 ```
 
 3. **ECRリポジトリ用にタグ付け**
 ```bash
 # API/Worker用
-docker tag langgenius/dify-api:1.7.2 <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-api:latest
+docker tag langgenius/dify-api:1.7.2 ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-api:latest
 
 # Web用
-docker tag langgenius/dify-web:1.7.2 <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-web:latest
+docker tag langgenius/dify-web:1.7.2 ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-web:latest
 
 # Sandbox用
-docker tag langgenius/dify-sandbox:0.2.12 <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-sandbox:latest
+docker tag langgenius/dify-sandbox:0.2.12 ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-sandbox:latest
+
+# Plugin Daemon用
+docker tag langgenius/dify-plugin-daemon:0.0.2 ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-plugin_daemon:latest
 ```
 
 4. **ECRにプッシュ**
 ```bash
-docker push <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-api:latest
-docker push <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-web:latest
-docker push <YOUR_ACCOUNT_ID>.dkr.ecr.ap-northeast-1.amazonaws.com/dify-sandbox:latest
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-api:latest
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-web:latest
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-sandbox:latest
+docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${BASE_NAME}/dify-plugin_daemon:latest
 ```
 
 ### 2. EFSにRDS CA証明書を設置
