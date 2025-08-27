@@ -61,6 +61,23 @@ resource "aws_security_group_rule" "valkey_ingress_6379_plugin_daemon" {
 }
 
 
+# Password for default user
+resource "random_password" "valkey_default_password" {
+  length           = 24
+  special          = true
+  override_special = "!&#$^<>-"
+}
+
+resource "aws_secretsmanager_secret" "valkey_default_password_secret" {
+  name                    = "${local.base_name}/elasticache/valkey/default-user-password"
+  recovery_window_in_days = 0
+}
+
+resource "aws_secretsmanager_secret_version" "valkey_default_password_secret_version" {
+  secret_id     = aws_secretsmanager_secret.valkey_default_password_secret.id
+  secret_string = random_password.valkey_default_password.result
+}
+
 # settings for valkey user for dify
 resource "random_password" "valkey_password" {
   length           = 24
@@ -95,6 +112,38 @@ resource "aws_secretsmanager_secret_version" "celery_broker_url_secret_version" 
 
   lifecycle {
     create_before_destroy = true
+  }
+}
+
+# Default user configuration with password
+resource "aws_elasticache_user" "default_user" {
+  user_id   = "default"
+  user_name = "default"
+  engine    = "valkey"
+
+  # Restrict default user access for security
+  access_string = "on ~* -@all +@read"
+
+  authentication_mode {
+    type      = "password"
+    passwords = [random_password.valkey_default_password.result]
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "elasticache-user-${local.base_name}-default"
+    }
+  )
+
+  lifecycle {
+    ignore_changes = [
+      access_string,
+      engine,
+      authentication_mode,
+      tags,
+      tags_all
+    ]
   }
 }
 
