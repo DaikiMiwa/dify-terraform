@@ -81,9 +81,55 @@ resource "aws_efs_file_system" "this" {
   tags = merge(
     var.default_tags,
     {
-      Naem = "efs-${local.base_name}-001"
+      Name = "efs-${local.base_name}-001"
     }
   )
+}
+
+# EFS File System Policy to enforce encryption in transit
+resource "aws_efs_file_system_policy" "this" {
+  file_system_id = aws_efs_file_system.this.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RequireSSL"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "*"
+        Resource = aws_efs_file_system.this.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
+      {
+        Sid    = "AllowRootAccessFromECSTaskRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            var.dify_api_task_role_arn,
+            var.dify_worker_task_role_arn,
+            var.dify_plugin_daemon_task_role_arn
+          ]
+        }
+        Action = [
+          "elasticfilesystem:CreateAccessPoint",
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:ClientRootAccess"
+        ]
+        Resource = aws_efs_file_system.this.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "true"
+          }
+        }
+      }
+    ]
+  })
 }
 
 # /certs を強制するアクセスポイント（uid/gid は任意。ECS から RO マウント）
@@ -135,6 +181,50 @@ resource "aws_efs_file_system" "plugins" {
       Name = "efs-${local.base_name}-plugins-001"
     }
   )
+}
+
+# EFS File System Policy for plugins to enforce encryption in transit
+resource "aws_efs_file_system_policy" "plugins" {
+  file_system_id = aws_efs_file_system.plugins.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "RequireSSL"
+        Effect = "Deny"
+        Principal = "*"
+        Action = "*"
+        Resource = aws_efs_file_system.plugins.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      },
+      {
+        Sid    = "AllowRootAccessFromPluginDaemonTaskRole"
+        Effect = "Allow"
+        Principal = {
+          AWS = [
+            var.dify_plugin_daemon_task_role_arn
+          ]
+        }
+        Action = [
+          "elasticfilesystem:CreateAccessPoint",
+          "elasticfilesystem:ClientMount",
+          "elasticfilesystem:ClientWrite",
+          "elasticfilesystem:ClientRootAccess"
+        ]
+        Resource = aws_efs_file_system.plugins.arn
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "true"
+          }
+        }
+      }
+    ]
+  })
 }
 
 # /plugins を強制するアクセスポイント（uid/gid は任意。Plugin Daemon から RW マウント）
