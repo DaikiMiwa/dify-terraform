@@ -110,9 +110,9 @@ resource "aws_efs_file_system_policy" "this" {
         Effect = "Allow"
         Principal = {
           AWS = [
-            var.dify_api_task_role_arn,
-            var.dify_worker_task_role_arn,
-            var.dify_plugin_daemon_task_role_arn
+            aws_iam_role.dify_api_task_role.arn,
+            aws_iam_role.dify_api_task_role.arn,  # worker also uses the same role
+            aws_iam_role.dify_plugin_daemon_task_role.arn
           ]
         }
         Action = [
@@ -207,7 +207,7 @@ resource "aws_efs_file_system_policy" "plugins" {
         Effect = "Allow"
         Principal = {
           AWS = [
-            var.dify_plugin_daemon_task_role_arn
+            aws_iam_role.dify_plugin_daemon_task_role.arn
           ]
         }
         Action = [

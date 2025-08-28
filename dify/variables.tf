@@ -91,21 +91,6 @@ variable "alb_ingress_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
-# ECS Task Role ARNs for EFS access policies
-variable "dify_api_task_role_arn" {
-  description = "ARN of the Dify API ECS task role for EFS access"
-  type        = string
-}
-
-variable "dify_worker_task_role_arn" {
-  description = "ARN of the Dify Worker ECS task role for EFS access"
-  type        = string
-}
-
-variable "dify_plugin_daemon_task_role_arn" {
-  description = "ARN of the Dify Plugin Daemon ECS task role for EFS access"
-  type        = string
-}
 
 # Cognito Configuration
 variable "enable_cognito_signup" {

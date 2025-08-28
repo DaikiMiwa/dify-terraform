@@ -148,11 +148,6 @@ Terraformの実行前に、以下の設定情報を準備してください：
 - **メタデータURL**: またはメタデータファイルパス
 - **メール属性マッピング**: SAML属性名
 
-#### ECS タスクロールARN
-EFSアクセス用のタスクロールARNを指定：
-- `dify_api_task_role_arn`
-- `dify_worker_task_role_arn` 
-- `dify_plugin_daemon_task_role_arn`
 
 ### 4. Terraform実行
 
