@@ -210,7 +210,12 @@ resource "aws_lb_listener" "https" {
   default_action {
     order = 2
     type  = "forward"
-    target_group_arn = aws_lb_target_group.dify_web.arn
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_web.arn
+      }
+    }
   }
 
   depends_on = [
@@ -248,8 +253,13 @@ resource "aws_lb_listener_rule" "oauth2_paths" {
 
   # OAuth2パスは認証なしでWebターゲットに直接転送
   action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.dify_web.arn
+    type = "forward"
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_web.arn
+      }
+    }
   }
 
   depends_on = [
@@ -294,7 +304,12 @@ resource "aws_lb_listener_rule" "dify_api_basic" {
   action {
     order = 2
     type  = "forward"
-    target_group_arn = aws_lb_target_group.dify_api.arn
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_api.arn
+      }
+    }
   }
 
   depends_on = [
@@ -339,7 +354,12 @@ resource "aws_lb_listener_rule" "dify_api_v1" {
   action {
     order = 2
     type  = "forward"
-    target_group_arn = aws_lb_target_group.dify_api.arn
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_api.arn
+      }
+    }
   }
 
   depends_on = [
@@ -384,7 +404,12 @@ resource "aws_lb_listener_rule" "dify_api_basic_routing" {
   action {
     order = 2
     type  = "forward"
-    target_group_arn = aws_lb_target_group.dify_api.arn
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_api.arn
+      }
+    }
   }
 
   depends_on = [
@@ -429,7 +454,12 @@ resource "aws_lb_listener_rule" "dify_api_v1_routing" {
   action {
     order = 2
     type  = "forward"
-    target_group_arn = aws_lb_target_group.dify_api.arn
+
+    forward {
+      target_group {
+        arn = aws_lb_target_group.dify_api.arn
+      }
+    }
   }
 
   depends_on = [
