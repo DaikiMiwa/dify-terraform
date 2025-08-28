@@ -91,3 +91,84 @@ variable "alb_ingress_cidr_blocks" {
   default     = ["0.0.0.0/0"]
 }
 
+# ECS Task Role ARNs for EFS access policies
+variable "dify_api_task_role_arn" {
+  description = "ARN of the Dify API ECS task role for EFS access"
+  type        = string
+}
+
+variable "dify_worker_task_role_arn" {
+  description = "ARN of the Dify Worker ECS task role for EFS access"
+  type        = string
+}
+
+variable "dify_plugin_daemon_task_role_arn" {
+  description = "ARN of the Dify Plugin Daemon ECS task role for EFS access"
+  type        = string
+}
+
+# Cognito Configuration
+variable "enable_cognito_signup" {
+  description = "Enable user signup in Cognito User Pool"
+  type        = bool
+  default     = false
+}
+
+variable "user_pool_name" {
+  description = "Name for the Cognito User Pool. If not provided, uses base_name-user-pool"
+  type        = string
+  default     = null
+}
+
+variable "saml_idp_name" {
+  description = "Name of the SAML identity provider"
+  type        = string
+}
+
+variable "saml_metadata_url" {
+  description = "URL for SAML metadata (use either this or saml_metadata_file)"
+  type        = string
+  default     = null
+}
+
+variable "saml_metadata_file" {
+  description = "Path to SAML metadata file (use either this or saml_metadata_url)"
+  type        = string
+  default     = null
+}
+
+variable "saml_email_attribute" {
+  description = "SAML attribute for email mapping"
+  type        = string
+  default     = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+}
+
+# DNS Configuration
+variable "domain_name" {
+  description = "The domain name for the application"
+  type        = string
+}
+
+variable "dify_subdomain" {
+  description = "Subdomain for the Dify application"
+  type        = string
+  default     = "dify"
+}
+
+variable "cognito_subdomain" {
+  description = "Subdomain for Cognito authentication"
+  type        = string
+  default     = "auth"
+}
+
+variable "route53_zone_id" {
+  description = "Route 53 hosted zone ID for DNS records"
+  type        = string
+}
+
+variable "create_acm_certificate" {
+  description = "Whether to create ACM certificate and DNS validation"
+  type        = bool
+  default     = true
+}
+

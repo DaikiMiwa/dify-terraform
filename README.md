@@ -1,4 +1,15 @@
 # dify-aws-terraform
+
+AWS上にDifyアプリケーションをセキュアにデプロイするためのTerraformモジュールです。
+
+## 主要なセキュリティ機能
+
+- **EFS暗号化**: 保存時および転送時の暗号化を強制
+- **ElastiCache認証**: パスワード保護されたデフォルトユーザー
+- **VPCエンドポイント**: プライベート通信によるAWSサービスアクセス
+- **セキュリティグループ**: 最小権限の原則に基づくアクセス制御
+- **Cognito認証**: SAML IdP統合による企業認証
+
 ## セットアップ手順
 
 ### 1. パブリックイメージをプライベートECRにプッシュ
@@ -89,9 +100,7 @@ wget https://truststore.pki.rds.amazonaws.com/ap-northeast-1/ap-northeast-1-bund
 sudo mkdir -p /mnt/efs
 
 # EFSをマウント（EFS_IDは実際のEFSファイルシステムIDに置き換え）
-sudo mount -t efs <EFS_ID>:/ /mnt/efs
-
-# または EFS Utilsを使用する場合
+# セキュリティ向上のため TLS暗号化を必須で使用
 sudo mount -t efs -o tls <EFS_ID>:/ /mnt/efs
 ```
 
@@ -115,13 +124,37 @@ ls -la /mnt/efs/certs/
 cat /mnt/efs/certs/rds-ca-bundle.pem | head -5
 ```
 
-#### 注意事項
+#### セキュリティに関する重要な注意事項
 
-- EFSアクセスポイントが作成された後に証明書を設置してください
-- EFSマウント時にはIAM権限が必要な場合があります
-- コンテナ内では `/app/certs/rds-ca-bundle.pem` としてマウントされます
+- **TLS暗号化必須**: EFSマウント時は必ず `-o tls` オプションを使用してください
+- **EFSファイルシステムポリシー**: SSL/TLS通信以外の接続は自動的にブロックされます
+- **IAM権限**: EFSアクセスには適切なIAM権限が必要です
+- **証明書設置**: EFSアクセスポイントが作成された後に証明書を設置してください
+- **コンテナマウント**: コンテナ内では `/app/certs/rds-ca-bundle.pem` としてマウントされます
 
-### 3. Terraform実行
+### 3. 必要な設定情報の準備
+
+Terraformの実行前に、以下の設定情報を準備してください：
+
+#### AWS DNS設定 (Route53)
+- **ドメイン名**: `example.com`
+- **Route53ホストゾーンID**: `Z1D633PJN98FT9`
+- **サブドメイン**: 
+  - Dify: `dify.example.com`
+  - 認証: `auth.example.com`
+
+#### Cognito SAML IdP設定
+- **IdP名**: 企業のSAML IdP名
+- **メタデータURL**: またはメタデータファイルパス
+- **メール属性マッピング**: SAML属性名
+
+#### ECS タスクロールARN
+EFSアクセス用のタスクロールARNを指定：
+- `dify_api_task_role_arn`
+- `dify_worker_task_role_arn` 
+- `dify_plugin_daemon_task_role_arn`
+
+### 4. Terraform実行
 
 ```bash
 # example ディレクトリに移動
@@ -129,10 +162,35 @@ cd example
 
 # 変数ファイルを設定
 cp terraform.tfvars.example terraform.tfvars
-# terraform.tfvars を編集して適切な値を設定
+# terraform.tfvars を編集して上記の設定値を記入
 
 # Terraformを実行
 terraform init
 terraform plan
 terraform apply
+```
+
+### 5. デプロイ後の確認
+
+デプロイ完了後、以下を確認してください：
+
+1. **EFS暗号化**: 転送時暗号化が有効化されている
+2. **ALBヘルスチェック**: 全てのターゲットがHealthy状態
+3. **DNS解決**: Difyアプリケーションにアクセス可能
+4. **認証フロー**: Cognito経由のSAMLログインが動作
+
+## アーキテクチャ
+
+```
+Internet Gateway
+    ↓
+Application Load Balancer (Public Subnet)
+    ↓
+ECS Fargate Tasks (Private Subnet)
+    ↓
+- Aurora PostgreSQL (Multi-AZ)
+- ElastiCache (Valkey)
+- EFS (暗号化済み)
+    ↓
+VPC Endpoints (AWS Services)
 ```
