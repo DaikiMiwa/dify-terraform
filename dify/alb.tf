@@ -94,6 +94,18 @@ resource "aws_security_group_rule" "dify_alb_egress_sandbox" {
   security_group_id = aws_security_group.dify_alb.id
 }
 
+# HTTPSアウトバウンドルール（Cognito認証用）
+resource "aws_security_group_rule" "dify_alb_egress_https" {
+  type        = "egress"
+  from_port   = 443
+  to_port     = 443
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+  description = "Allow outbound traffic on port 443"
+
+  security_group_id = aws_security_group.dify_alb.id
+}
+
 resource "aws_alb" "dify_alb" {
   name               = "alb-${local.base_name}-dify-001"
   internal           = false
@@ -234,14 +246,56 @@ resource "aws_lb_target_group" "dify_sandbox" {
   )
 }
 
-# HTTPで入力を受け付けて、Webタスクに転送するリスナーを作成
-resource "aws_lb_listener" "https" {
+# HTTPからHTTPSへのリダイレクト用リスナー
+resource "aws_lb_listener" "http_redirect" {
   load_balancer_arn = aws_alb.dify_alb.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "alb-listener-http-redirect-${local.base_name}-dify-001"
+    }
+  )
+}
+
+# HTTPSリスナー（Cognito認証付き）
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_alb.dify_alb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS-1-2-2017-01"
+  certificate_arn   = var.create_acm_certificate ? aws_acm_certificate_validation.dify_cert_validation[0].certificate_arn : null
+
+  default_action {
+    order = 1
+    type  = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.dify.arn
+      user_pool_client_id = aws_cognito_user_pool_client.dify.id
+      user_pool_domain    = aws_cognito_user_pool_domain.dify.domain
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      scope               = "openid"
+      session_timeout     = 3600
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  default_action {
+    order = 2
+    type  = "forward"
     target_group_arn = aws_lb_target_group.dify_web.arn
   }
 
@@ -250,12 +304,15 @@ resource "aws_lb_listener" "https" {
     aws_lb_target_group.dify_api,
     aws_lb_target_group.dify_plugin_daemon,
     aws_lb_target_group.dify_sandbox,
+    aws_cognito_user_pool.dify,
+    aws_cognito_user_pool_client.dify,
+    aws_cognito_user_pool_domain.dify
   ]
 
   tags = merge(
     var.default_tags,
     {
-      Name = "alb-listener-${local.base_name}-dify-001"
+      Name = "alb-listener-https-${local.base_name}-dify-001"
     }
   )
 }
@@ -264,6 +321,36 @@ resource "aws_lb_listener" "https" {
 locals {
   api_paths_basic = ["/console/api", "/api", "/files"]
   api_paths_v1    = ["/v1/apps", "/v1/workflows", "/v1/datasets", "/v1/chat-messages", "/v1/completion-messages"]
+}
+
+# OAuth2パスは認証をスキップする必要がある
+resource "aws_lb_listener_rule" "oauth2_paths" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+
+  condition {
+    path_pattern {
+      values = ["/oauth2/*"]
+    }
+  }
+
+  # OAuth2パスは認証なしでWebターゲットに直接転送
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dify_web.arn
+  }
+
+  depends_on = [
+    aws_lb_target_group.dify_web,
+    aws_lb_listener.https
+  ]
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "oauth2-listener-rule-${local.base_name}-001"
+    }
+  )
 }
 
 resource "aws_lb_listener_rule" "dify_api_basic" {
@@ -276,8 +363,25 @@ resource "aws_lb_listener_rule" "dify_api_basic" {
     }
   }
 
+  # Cognito認証を追加
   action {
-    type             = "forward"
+    order = 1
+    type  = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.dify.arn
+      user_pool_client_id = aws_cognito_user_pool_client.dify.id
+      user_pool_domain    = aws_cognito_user_pool_domain.dify.domain
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      scope               = "openid"
+      session_timeout     = 3600
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  action {
+    order = 2
+    type  = "forward"
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
 
@@ -304,8 +408,25 @@ resource "aws_lb_listener_rule" "dify_api_v1" {
     }
   }
 
+  # Cognito認証を追加
   action {
-    type             = "forward"
+    order = 1
+    type  = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.dify.arn
+      user_pool_client_id = aws_cognito_user_pool_client.dify.id
+      user_pool_domain    = aws_cognito_user_pool_domain.dify.domain
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      scope               = "openid"
+      session_timeout     = 3600
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  action {
+    order = 2
+    type  = "forward"
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
 
@@ -332,8 +453,25 @@ resource "aws_lb_listener_rule" "dify_api_basic_routing" {
     }
   }
 
+  # Cognito認証を追加
   action {
-    type             = "forward"
+    order = 1
+    type  = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.dify.arn
+      user_pool_client_id = aws_cognito_user_pool_client.dify.id
+      user_pool_domain    = aws_cognito_user_pool_domain.dify.domain
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      scope               = "openid"
+      session_timeout     = 3600
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  action {
+    order = 2
+    type  = "forward"
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
 
@@ -360,8 +498,25 @@ resource "aws_lb_listener_rule" "dify_api_v1_routing" {
     }
   }
 
+  # Cognito認証を追加
   action {
-    type             = "forward"
+    order = 1
+    type  = "authenticate-cognito"
+
+    authenticate_cognito {
+      user_pool_arn       = aws_cognito_user_pool.dify.arn
+      user_pool_client_id = aws_cognito_user_pool_client.dify.id
+      user_pool_domain    = aws_cognito_user_pool_domain.dify.domain
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      scope               = "openid"
+      session_timeout     = 3600
+      on_unauthenticated_request = "authenticate"
+    }
+  }
+
+  action {
+    order = 2
+    type  = "forward"
     target_group_arn = aws_lb_target_group.dify_api.arn
   }
 

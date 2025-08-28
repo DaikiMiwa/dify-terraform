@@ -267,12 +267,12 @@ resource "aws_ecs_task_definition" "dify_api" {
           MODE = "api"
 
           # basic settings
-          CONSOLE_API_URL = "http://${aws_alb.dify_alb.dns_name}"
-          CONSOLE_WEB_URL = "http://${aws_alb.dify_alb.dns_name}"
-          SERVICE_API_URL = "http://${aws_alb.dify_alb.dns_name}"
-          APP_API_URL     = "http://${aws_alb.dify_alb.dns_name}"
-          APP_WEB_URL     = "http://${aws_alb.dify_alb.dns_name}"
-          FILES_URL       = "http://${aws_alb.dify_alb.dns_name}"
+          CONSOLE_API_URL = "https://${local.dify_fqdn}"
+          CONSOLE_WEB_URL = "https://${local.dify_fqdn}"
+          SERVICE_API_URL = "https://${local.dify_fqdn}"
+          APP_API_URL     = "https://${local.dify_fqdn}"
+          APP_WEB_URL     = "https://${local.dify_fqdn}"
+          FILES_URL       = "https://${local.dify_fqdn}"
 
           # PostgreSQL DB settings
           DB_HOST = aws_rds_cluster.aurora.endpoint
@@ -307,7 +307,7 @@ resource "aws_ecs_task_definition" "dify_api" {
           CONSOLE_CORS_ALLOW_ORIGINS = "*"
 
           # code execution endpoint
-          CODE_EXECUTION_ENDPOINT = "http://${aws_alb.dify_alb.dns_name}"
+          CODE_EXECUTION_ENDPOINT = "http://sandbox.dify.local:8194"
 
           # PostgreSQL DB - non-secret values
           DB_USERNAME   = aws_rds_cluster.aurora.master_username
@@ -332,8 +332,8 @@ resource "aws_ecs_task_definition" "dify_api" {
           SQLALCHEMY_ECHO        = "false"
 
           # plugin daemon settings
-          PLUGIN_DAEMON_PORT = 80
-          PLUGIN_DAEMON_URL  = "http://${aws_alb.dify_alb.dns_name}"
+          PLUGIN_DAEMON_PORT = 5002
+          PLUGIN_DAEMON_URL  = "http://plugin-daemon.dify.local:5002"
         } : { name = name, value = tostring(value) }
       ]
       secrets = [

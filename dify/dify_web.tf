@@ -131,8 +131,8 @@ resource "aws_ecs_task_definition" "dify_web" {
       essential = true
       environment = [
         for name, value in {
-          CONSOLE_API_URL            = "http://${aws_alb.dify_alb.dns_name}"
-          APP_API_URL                = "http://${aws_alb.dify_alb.dns_name}"
+          CONSOLE_API_URL            = "https://${local.dify_fqdn}"
+          APP_API_URL                = "https://${local.dify_fqdn}"
           TEXT_GENERATION_TIMEOUT_MS = 60000
         } : { name = name, value = tostring(value) }
       ]
