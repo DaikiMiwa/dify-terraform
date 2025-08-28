@@ -64,6 +64,17 @@ resource "aws_security_group_rule" "dify_worker_egress_efs" {
   description = "Allow NFS traffic from ECS tasks to EFS"
 }
 
+resource "aws_security_group_rule" "dify_worker_egress_plugin_daemon" {
+  type                     = "egress"
+  from_port                = 5002
+  to_port                  = 5002
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_plugin_daemon.id
+  description              = "Allow outbound traffic to plugin daemon"
+
+  security_group_id = aws_security_group.dify_worker.id
+}
+
 # VPC Endpoints への HTTPS 通信を許可
 resource "aws_security_group_rule" "dify_worker_egress_vpc_endpoints" {
   type              = "egress"
@@ -230,8 +241,8 @@ resource "aws_ecs_task_definition" "dify_worker" {
           SQLALCHEMY_ECHO        = "true"
 
           # plugin daemon settings
-          PLUGIN_DAEMON_PORT = 80
-          PLUGIN_DAEMON_URL  = "http://${aws_alb.dify_alb.dns_name}"
+          PLUGIN_DAEMON_PORT = 5002
+          PLUGIN_DAEMON_URL  = "http://plugin-daemon.dify.local:5002"
         } : { name = name, value = tostring(value) }
       ]
       secrets = [
@@ -295,6 +306,12 @@ resource "aws_ecs_service" "dify_worker" {
     subnets          = var.private_subnet_ids
     security_groups  = [aws_security_group.dify_worker.id]
     assign_public_ip = false
+  }
+
+  # Service Connect configuration (client mode)
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.dify.arn
   }
 
   depends_on = [

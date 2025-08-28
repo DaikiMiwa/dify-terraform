@@ -83,6 +83,17 @@ resource "aws_security_group_rule" "dify_api_egress_plugin_daemon" {
   security_group_id = aws_security_group.dify_api.id
 }
 
+resource "aws_security_group_rule" "dify_api_egress_sandbox" {
+  type                     = "egress"
+  from_port                = 8194
+  to_port                  = 8194
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.dify_sandbox.id
+  description              = "Allow outbound traffic to sandbox"
+
+  security_group_id = aws_security_group.dify_api.id
+}
+
 # VPC Endpoints への HTTPS 通信を許可
 resource "aws_security_group_rule" "dify_api_egress_vpc_endpoints" {
   type              = "egress"
@@ -420,6 +431,11 @@ resource "aws_ecs_service" "dify_api" {
     container_port   = 5001
   }
 
+  # Service Connect configuration (client mode)
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.dify.arn
+  }
 
   tags = merge(
     var.default_tags,
