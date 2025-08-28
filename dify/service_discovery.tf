@@ -31,7 +31,6 @@ resource "aws_service_discovery_service" "plugin_daemon" {
     routing_policy = "MULTIVALUE"
   }
 
-  health_check_grace_period_seconds = 30
 
   tags = merge(
     var.default_tags,
@@ -56,7 +55,6 @@ resource "aws_service_discovery_service" "sandbox" {
     routing_policy = "MULTIVALUE"
   }
 
-  health_check_grace_period_seconds = 30
 
   tags = merge(
     var.default_tags,
