@@ -419,4 +419,12 @@ resource "aws_ecs_service" "dify_api" {
     container_name   = "dify-api"
     container_port   = 5001
   }
+
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "ecs-service-${local.base_name}-dify-api-001"
+    }
+  )
 }

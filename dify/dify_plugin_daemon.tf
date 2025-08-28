@@ -17,16 +17,6 @@ resource "aws_security_group" "dify_plugin_daemon" {
 }
 
 # Plugin Daemon ingress rules
-resource "aws_security_group_rule" "dify_plugin_daemon_ingress_alb" {
-  type                     = "ingress"
-  from_port                = 5002
-  to_port                  = 5002
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_alb.id
-  description              = "Allow inbound traffic from ALB to plugin daemon"
-
-  security_group_id = aws_security_group.dify_plugin_daemon.id
-}
 
 resource "aws_security_group_rule" "dify_plugin_daemon_ingress_api" {
   type                     = "ingress"
@@ -50,16 +40,6 @@ resource "aws_security_group_rule" "dify_plugin_daemon_ingress_worker" {
   security_group_id = aws_security_group.dify_plugin_daemon.id
 }
 
-resource "aws_security_group_rule" "dify_plugin_daemon_ingress_plugin_install" {
-  type                     = "ingress"
-  from_port                = 5003
-  to_port                  = 5003
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_alb.id
-  description              = "Allow inbound traffic from ALB for plugin installation"
-
-  security_group_id = aws_security_group.dify_plugin_daemon.id
-}
 
 # Plugin Daemon egress rules
 
@@ -340,6 +320,7 @@ resource "aws_ecs_task_definition" "dify_plugin_daemon" {
 
       portMappings = [
         {
+          name          = "plugin-daemon-port"
           hostPort      = 5002
           containerPort = 5002
           protocol      = "tcp"
@@ -458,7 +439,6 @@ resource "aws_ecs_task_definition" "dify_plugin_daemon" {
 
 # ECS Service for Plugin Daemon
 resource "aws_ecs_service" "dify_plugin_daemon" {
-  depends_on             = [aws_lb_listener_rule.dify_plugin_daemon]
   name                   = "dify-plugin-daemon"
   cluster                = aws_ecs_cluster.dify.name
   desired_count          = 1
@@ -473,10 +453,20 @@ resource "aws_ecs_service" "dify_plugin_daemon" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.dify_plugin_daemon.arn
-    container_name   = "dify-plugin-daemon"
-    container_port   = 5002
+  # Service Connect configuration
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.dify.arn
+
+    service {
+      port_name      = "plugin-daemon-port"
+      discovery_name = "plugin-daemon"
+      
+      client_alias {
+        port     = 5002
+        dns_name = "plugin-daemon.dify.local"
+      }
+    }
   }
 
   tags = merge(

@@ -61,38 +61,8 @@ resource "aws_security_group_rule" "dify_alb_egress_api" {
   security_group_id = aws_security_group.dify_alb.id
 }
 
-resource "aws_security_group_rule" "dify_alb_egress_plugin_daemon" {
-  type                     = "egress"
-  from_port                = 5002
-  to_port                  = 5002
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_plugin_daemon.id
-  description              = "Allow outbound traffic to plugin daemon tasks"
 
-  security_group_id = aws_security_group.dify_alb.id
-}
 
-resource "aws_security_group_rule" "dify_alb_egress_plugin_install" {
-  type                     = "egress"
-  from_port                = 5003
-  to_port                  = 5003
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_plugin_daemon.id
-  description              = "Allow outbound traffic to plugin installation service"
-
-  security_group_id = aws_security_group.dify_alb.id
-}
-
-resource "aws_security_group_rule" "dify_alb_egress_sandbox" {
-  type                     = "egress"
-  from_port                = 8194
-  to_port                  = 8194
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_sandbox.id
-  description              = "Allow outbound traffic to sandbox tasks"
-
-  security_group_id = aws_security_group.dify_alb.id
-}
 
 # HTTPSアウトバウンドルール（Cognito認証用）
 resource "aws_security_group_rule" "dify_alb_egress_https" {
@@ -188,63 +158,7 @@ resource "aws_lb_target_group" "dify_web" {
   )
 }
 
-resource "aws_lb_target_group" "dify_plugin_daemon" {
-  name        = "tg-${local.base_name}-dify-plugin"
-  port        = 5002
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
 
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 30
-    matcher             = "200"
-    path                = "/health/check"
-    timeout             = 20
-    unhealthy_threshold = 5
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = merge(
-    var.default_tags,
-    {
-      Name = "tg-${local.base_name}-dify-plugin-001"
-    }
-  )
-}
-
-resource "aws_lb_target_group" "dify_sandbox" {
-  name        = "tg-${local.base_name}-dify-sandbox"
-  port        = 8194
-  protocol    = "HTTP"
-  vpc_id      = var.vpc_id
-  target_type = "ip"
-
-  health_check {
-    enabled             = true
-    healthy_threshold   = 2
-    interval            = 60
-    matcher             = "200"
-    path                = "/health"
-    timeout             = 10
-    unhealthy_threshold = 3
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = merge(
-    var.default_tags,
-    {
-      Name = "tg-${local.base_name}-dify-sandbox-001"
-    }
-  )
-}
 
 # HTTPからHTTPSへのリダイレクト用リスナー
 resource "aws_lb_listener" "http_redirect" {
@@ -302,8 +216,6 @@ resource "aws_lb_listener" "https" {
   depends_on = [
     aws_lb_target_group.dify_web,
     aws_lb_target_group.dify_api,
-    aws_lb_target_group.dify_plugin_daemon,
-    aws_lb_target_group.dify_sandbox,
     aws_cognito_user_pool.dify,
     aws_cognito_user_pool_client.dify,
     aws_cognito_user_pool_domain.dify
@@ -533,60 +445,4 @@ resource "aws_lb_listener_rule" "dify_api_v1_routing" {
   )
 }
 
-# Plugin daemon routing for /plugin path
-resource "aws_lb_listener_rule" "dify_plugin_daemon" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 30
 
-  condition {
-    path_pattern {
-      values = ["/plugin", "/plugin/*"]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.dify_plugin_daemon.arn
-  }
-
-  depends_on = [
-    aws_lb_target_group.dify_plugin_daemon,
-    aws_lb_listener.https
-  ]
-
-  tags = merge(
-    var.default_tags,
-    {
-      Name = "dify-plugin-daemon-listener-rule-${local.base_name}-001"
-    }
-  )
-}
-
-# Sandbox routing for /sandbox and /v1/sandbox paths  
-resource "aws_lb_listener_rule" "dify_sandbox" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 18
-
-  condition {
-    path_pattern {
-      values = ["/sandbox", "/sandbox/*", "/v1/sandbox", "/v1/sandbox/*"]
-    }
-  }
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.dify_sandbox.arn
-  }
-
-  depends_on = [
-    aws_lb_target_group.dify_sandbox,
-    aws_lb_listener.https
-  ]
-
-  tags = merge(
-    var.default_tags,
-    {
-      Name = "dify-sandbox-listener-rule-${local.base_name}-001"
-    }
-  )
-}

@@ -16,16 +16,6 @@ resource "aws_security_group" "dify_sandbox" {
 }
 
 # Sandbox ingress rules
-resource "aws_security_group_rule" "dify_sandbox_ingress_alb" {
-  type                     = "ingress"
-  from_port                = 8194
-  to_port                  = 8194
-  protocol                 = "tcp"
-  source_security_group_id = aws_security_group.dify_alb.id
-  description              = "Allow inbound traffic from ALB"
-
-  security_group_id = aws_security_group.dify_sandbox.id
-}
 
 resource "aws_security_group_rule" "dify_sandbox_ingress_api" {
   type                     = "ingress"
@@ -111,6 +101,7 @@ resource "aws_ecs_task_definition" "dify_sandbox" {
 
       portMappings = [
         {
+          name          = "sandbox-port"
           hostPort      = 8194
           protocol      = "tcp"
           containerPort = 8194
@@ -164,7 +155,6 @@ resource "aws_ecs_task_definition" "dify_sandbox" {
 
 # ECS Service for Sandbox
 resource "aws_ecs_service" "dify_sandbox" {
-  depends_on             = [aws_lb_listener_rule.dify_sandbox]
   name                   = "dify-sandbox"
   cluster                = aws_ecs_cluster.dify.name
   desired_count          = 1
@@ -179,9 +169,26 @@ resource "aws_ecs_service" "dify_sandbox" {
     assign_public_ip = false
   }
 
-  load_balancer {
-    target_group_arn = aws_lb_target_group.dify_sandbox.arn
-    container_name   = "dify-sandbox"
-    container_port   = 8194
+  # Service Connect configuration
+  service_connect_configuration {
+    enabled   = true
+    namespace = aws_service_discovery_private_dns_namespace.dify.arn
+
+    service {
+      port_name      = "sandbox-port"
+      discovery_name = "sandbox"
+      
+      client_alias {
+        port     = 8194
+        dns_name = "sandbox.dify.local"
+      }
+    }
   }
+
+  tags = merge(
+    var.default_tags,
+    {
+      Name = "ecs-service-${local.base_name}-dify-sandbox-001"
+    }
+  )
 }
