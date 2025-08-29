@@ -23,8 +23,7 @@ output "elasticache_endpoints" {
 output "elasticache_secrets" {
   value = {
     celery_broker_url_secret_arn = aws_secretsmanager_secret.celery_broker_url_secret.arn
-    main_cache_password_secret_arn = aws_secretsmanager_secret.valkey_password_secret.arn
-    celery_cache_password_secret_arn = aws_secretsmanager_secret.celery_valkey_password_secret.arn
+    valkey_default_password_secret_arn = aws_secretsmanager_secret.valkey_default_password_secret.arn
   }
 }
 

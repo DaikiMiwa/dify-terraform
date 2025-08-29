@@ -218,7 +218,7 @@ resource "aws_iam_role_policy" "dify_plugin_daemon_task_policy" {
           aws_secretsmanager_secret.dify_secret_key.arn,
           aws_secretsmanager_secret.dify_sandbox_api_key.arn,
           aws_secretsmanager_secret.db_password.arn,
-          aws_secretsmanager_secret.valkey_password_secret.arn
+          aws_secretsmanager_secret.valkey_default_password_secret.arn
         ]
       },
       {
