@@ -197,7 +197,6 @@ resource "aws_ecs_task_definition" "dify_worker" {
           REDIS_PORT     = "6379"
           REDIS_DB       = 0
           REDIS_USE_SSL  = "true"
-          REDIS_USERNAME = aws_elasticache_user.app_user.user_name
 
           # Celery settings (using shared ElastiCache with DB 1)
           CELERY_BACKEND = "redis"
@@ -257,7 +256,7 @@ resource "aws_ecs_task_definition" "dify_worker" {
           # SQLALCHEMY_DATABASE_URI = aws_secretsmanager_secret.sql_uri.arn
 
           # Redis Settings
-          REDIS_PASSWORD = aws_secretsmanager_secret.valkey_password_secret.arn
+          REDIS_PASSWORD = aws_secretsmanager_secret.valkey_default_password_secret.arn
 
           # Celery settings
           # The format is like redis://<redis_username>:<redis_password>@<redis_host>:<redis_port>/<redis_database>

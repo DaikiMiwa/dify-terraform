@@ -371,7 +371,6 @@ resource "aws_ecs_task_definition" "dify_plugin_daemon" {
           REDIS_PORT     = "6379"
           REDIS_DB       = 0
           REDIS_USE_SSL  = "true"
-          REDIS_USERNAME = aws_elasticache_user.app_user.user_name
 
         } : { name = name, value = tostring(value) }
       ]
@@ -391,7 +390,7 @@ resource "aws_ecs_task_definition" "dify_plugin_daemon" {
         },
         {
           name      = "REDIS_PASSWORD"
-          valueFrom = aws_secretsmanager_secret.valkey_password_secret.arn
+          valueFrom = aws_secretsmanager_secret.valkey_default_password_secret.arn
         }
       ]
 
