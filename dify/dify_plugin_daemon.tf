@@ -402,7 +402,7 @@ resource "aws_ecs_task_definition" "dify_plugin_daemon" {
         },
         {
           sourceVolume  = "efs-plugins",
-          containerPath = "/app/storage/plugins",
+          containerPath = "/app/storage",
           readOnly      = false
         }
       ]
